@@ -140,9 +140,10 @@ def lat2_cyl(ents, mat, x, y, z0, r, h)
 end
 
 def lat2_tree(ents, x, y, trunk_h, crown_r)
-  lat2_cyl(ents, MAT_TRUNK, x, y, 0, 0.18, trunk_h)
-  lat2_cyl(ents, MAT_LEAF, x, y, trunk_h - 1.4, crown_r, crown_r * 1.4)
-  lat2_cyl(ents, MAT_LEAF, x, y, trunk_h + crown_r - 0.8, crown_r * 0.6, crown_r)
+  # x/y 为英寸, 高度与半径为米 -> 换算英寸
+  lat2_cyl(ents, MAT_TRUNK, x, y, 0, 0.18 * 12, trunk_h * 12)
+  lat2_cyl(ents, MAT_LEAF, x, y, trunk_h * 12 - 1.4 * 12, crown_r * 12, crown_r * 12 * 1.4)
+  lat2_cyl(ents, MAT_LEAF, x, y, (trunk_h + crown_r) * 12 - 0.8 * 12, crown_r * 12 * 0.6, crown_r * 12)
 end
 
 def lat2_group(name, layer_name)
@@ -172,16 +173,16 @@ lat2_plate(g_house.entities, MAT_CEM,
 lat2_plate(g_house.entities, MAT_PLY,
   [m2(0), m2(5.05), m2(0.2)], [m2(12), m2(5.05), m2(0.2)],
   [m2(12), m2(5.05), m2(5.5)], [m2(0), m2(5.05), m2(4.7)], m2(0.25))
-[3.4, 8.4].each do |x|
-  lat2_box(g_house.entities, MAT_GLASS, m2(x), m2(5.28), m2(0.3), m2(x + 3.0), m2(5.34), m2(2.85))
+[2.2, 4.6, 7.0].each do |x|
+  lat2_box(g_house.entities, MAT_GLASS, m2(x), m2(5.28), m2(0.3), m2(x + 1.8), m2(5.34), m2(2.7))
 end
-[1.3, 5.3, 9.3].each do |x|
-  lat2_box(g_house.entities, MAT_DARK, m2(x), m2(5.28), m2(3.5), m2(x + 1.8), m2(5.34), m2(4.9))
+# 上层开口依 img_12: 4 方窗 + 中央大洞
+[[1.0, 2.2, 3.7, 4.9], [3.4, 4.6, 3.7, 4.9], [5.1, 6.9, 3.5, 5.2], [7.4, 8.6, 3.7, 4.9], [9.2, 10.4, 3.7, 4.9]].each do |a, b, z1, z2|
+  lat2_box(g_house.entities, MAT_DARK, m2(a), m2(5.28), m2(z1), m2(b), m2(5.34), m2(z2))
 end
-# 街面(Y=0): 入口门 + 窗带(依西立面开启态)
-lat2_box(g_house.entities, MAT_PLY, m2(0.7), m2(-0.04), m2(0.3), m2(1.9), m2(0.02), m2(2.1))
-[3.0, 5.4, 7.8, 10.2, 12.6].each do |x|
-  lat2_box(g_house.entities, MAT_GLASS, m2(x), m2(-0.02), m2(0.55), m2(x + 1.5), m2(0.04), m2(1.55))
+# 街面(Y=0): 4 樘轴门(依平面图 4 弧节奏)
+[0.9, 4.1, 7.3, 10.5].each do |x|
+  lat2_box(g_house.entities, MAT_GLASS, m2(x), m2(-0.04), m2(0.3), m2(x + 1.4), m2(0.02), m2(2.4))
 end
 # 室内核心(厨卫楼梯) + 夹层
 lat2_box(g_house.entities, MAT_PLY, m2(4.0), m2(1.0), m2(0.2), m2(6.8), m2(3.4), m2(2.85))
@@ -217,10 +218,19 @@ lat2_box(g_serre.entities, MAT_STEEL, m2(0),     m2(5.3),  m2(2.52), m2(0.12),  
 lat2_box(g_serre.entities, MAT_STEEL, m2(11.88), m2(5.3),  m2(2.52), m2(12.0),  m2(12.5), m2(2.66))
 lat2_box(g_serre.entities, MAT_STEEL, m2(0),     m2(5.3),  m2(4.55), m2(0.12),  m2(12.5), m2(4.68))
 lat2_box(g_serre.entities, MAT_STEEL, m2(11.88), m2(5.3),  m2(4.55), m2(12.0),  m2(12.5), m2(4.68))
-# 膜: 花园面整片 + 两侧 + 顶(屋面下的水平膜带)
+# 膜: 花园面整片(半透) + 顶(半透); 侧面改透明玻璃 + 钢架网格(依实拍)
 lat2_box(g_serre.entities, MAT_FILM, m2(0.14),  m2(12.47), m2(0.36), m2(11.86), m2(12.52), m2(6.2))
-lat2_box(g_serre.entities, MAT_FILM, m2(0.02),  m2(5.4),   m2(0.36), m2(0.08),  m2(12.42), m2(6.2))
-lat2_box(g_serre.entities, MAT_FILM, m2(11.92), m2(5.4),   m2(0.36), m2(11.98), m2(12.42), m2(6.2))
+lat2_box(g_serre.entities, MAT_GLASS, m2(0.02),  m2(5.4),   m2(0.36), m2(0.08),  m2(12.42), m2(6.2))
+lat2_box(g_serre.entities, MAT_GLASS, m2(11.92), m2(5.4),   m2(0.36), m2(11.98), m2(12.42), m2(6.2))
+# 侧面钢架网格(横梁已有, 补中间立柱)
+[6.9, 8.5, 10.1].each do |y|
+  lat2_box(g_serre.entities, MAT_STEEL, m2(0),     m2(y), m2(0.2), m2(0.12), m2(y + 0.1), m2(6.3))
+  lat2_box(g_serre.entities, MAT_STEEL, m2(11.88), m2(y), m2(0.2), m2(12.0), m2(y + 0.1), m2(6.3))
+end
+# 花园面中间钢柱(1m 分格)
+[1.0, 3.0, 5.0, 7.0, 9.0, 11.0].each do |x|
+  lat2_box(g_serre.entities, MAT_STEEL, m2(x - 0.03), m2(12.44), m2(0.2), m2(x + 0.03), m2(12.5), m2(6.3))
+end
 # 中段膜(柱间) + 顶段玻璃窗带
 lat2_box(g_serre.entities, MAT_FILM,  m2(0.16), m2(12.44), m2(2.7),  m2(11.84), m2(12.5),  m2(4.25))
 lat2_box(g_serre.entities, MAT_GLASS, m2(0.18), m2(12.44), m2(4.32), m2(11.82), m2(12.5),  m2(5.95))
@@ -244,19 +254,14 @@ end
 # 冬季花园地砖
 lat2_box(g_serre.entities, MAT_PAVE, m2(0.1), m2(5.32), m2(0.2), m2(11.9), m2(12.42), m2(0.3))
 
-puts '[5/7] 屋面开敞通风带(住宅屋面与阳光房顶之间)...'
-# 依北立面: 主体上方保留开敞框架条带(立柱已在阳光房组, 此处补两根横梁)
-[0.5, 6.0, 11.5].each do |x|
-  lat2_box(g_serre.entities, MAT_STEEL, m2(x - 0.07), m2(4.9), m2(5.62), m2(x + 0.07), m2(5.06), m2(6.3))
-end
-
-puts '[6/7] 配景...'
+puts '[5/7] 配景...'
+# (依实拍: 顶部斜坡无额外突起, 屋面通风条带已按用户意见移除)
 g_land = lat2_group('TREES', '05-配景')
 [[-5, 4, 7, 2.6], [16, 8, 8, 3], [18.5, 14, 6.5, 2.4], [-6.5, 14, 7.5, 2.8], [5, 16.5, 7, 2.6], [16, -6, 7, 2.6]].each do |x, y, h, r|
   lat2_tree(g_land.entities, m2(x), m2(y), h, r)
 end
 
-puts '[7/7] 场景与出图...'
+puts '[6/7] 场景与出图...'
 bb = model.bounds
 c = bb.center
 diag = bb.diagonal

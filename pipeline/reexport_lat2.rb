@@ -19,6 +19,11 @@ def cam2(eye, target, up, persp)
 end
 
 view = model.active_view
+# 关闭阴影: 透明膜屋面在 SketchUp 中仍会投影, 会导致阳光房内部全黑
+begin
+  model.shadow_info['ShadowsOn'] = false
+rescue
+end
 VIEWS4 = [
   ['LT2-01-花园透视', -> { cam2([c.x + diag*0.55, c.y + diag*0.62, diag*0.22], [c.x, c.y, ft(3)], [0, 0, 1], true) }],
   ['LT2-02-街道透视', -> { cam2([c.x + diag*0.10, c.y - diag*0.62, diag*0.18], [c.x, c.y, ft(2.8)], [0, 0, 1], true) }],
