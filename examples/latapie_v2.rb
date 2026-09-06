@@ -53,11 +53,12 @@ end
 
 MAT_CONC  = lat2_mat(model, 'MAT_基座_混凝土', [202, 200, 194])
 MAT_PLY   = lat2_mat(model, 'MAT_墙_胶合板',   [198, 150, 92])
+MAT_CEM   = lat2_mat(model, 'MAT_板_水泥纤维', [176, 180, 176])
 MAT_CORR  = lat2_mat(model, 'MAT_板_波纹钢',   [190, 194, 198])
 MAT_STEEL = lat2_mat(model, 'MAT_框_钢架',     [172, 176, 180])
 MAT_GLASS = lat2_mat(model, 'MAT_窗_玻璃',     [150, 180, 196], 0.45)
 MAT_DARK  = lat2_mat(model, 'MAT_窗_暗玻璃',   [44, 56, 70], 0.8)
-MAT_FILM  = lat2_mat(model, 'MAT_膜_半透明',   [238, 242, 238], 0.22)
+MAT_FILM  = lat2_mat(model, 'MAT_膜_透明',     [242, 246, 242], 0.10)
 MAT_PAVE  = lat2_mat(model, 'MAT_地_地砖',     [212, 208, 200])
 MAT_GRASS = lat2_mat(model, 'MAT_地_草地',     [110, 134, 86])
 MAT_LEAF  = lat2_mat(model, 'MAT_树_树冠',     [86, 116, 70])
@@ -96,9 +97,10 @@ def lat2_plate(ents, mat, p1, p2, p3, p4, thick)
     edges = f.edges
     f.material = mat; f.back_material = mat
     n = f.normal
-    f.reverse! if n.z < 0 && n.x.abs < 0.9 # 水平面朝上; 竖面/斜面保持法线向外
+    f.reverse! if n.z < 0 && n.x.abs < 0.9
     d = thick
-    d = -d if f.normal.z > 0.9 && pts[0][2] == pts[1][2] && pts[0][2] > 0 # 顶面板向下
+    d = -d if f.normal.y < -0.9  # 朝-Y 的墙面向 +Y 外侧推(否则会被主体吞掉)
+    d = -d if f.normal.z > 0.9 && pts[0][2] == pts[1][2] && pts[0][2] > 0
     f.pushpull(d)
     edges.each do |e|
       begin
@@ -162,23 +164,24 @@ lat2_box(g_base.entities, MAT_CONC, m2(-0.25), m2(-0.25), 0, m2(12.25), m2(12.85
 
 puts '[2/7] 主体楔形体量(单坡, 檐口 4.7 -> 5.5)...'
 g_house = lat2_group('HOUSE', '03-主体')
-# 楔形主体: X=0 剖面梯形, 沿 X 推拉 12m
-lat2_plate(g_house.entities, MAT_PLY,
+# 楔形主体(外层水泥纤维板): X=0 剖面梯形, 沿 X 推拉 12m
+lat2_plate(g_house.entities, MAT_CEM,
   [m2(0), m2(0), m2(0.2)], [m2(0), m2(5.3), m2(0.2)],
   [m2(0), m2(5.3), m2(5.5)], [m2(0), m2(0), m2(4.7)], m2(12))
-# 冬季花园方向前墙: 玻璃推拉门(首层) + 百叶窗(二层)
+# 冬季花园方向前墙(木质, 依实拍): 2 樘大推拉门(厨房/客厅) + 3 樘卧室百叶窗
 lat2_plate(g_house.entities, MAT_PLY,
   [m2(0), m2(5.05), m2(0.2)], [m2(12), m2(5.05), m2(0.2)],
   [m2(12), m2(5.05), m2(5.5)], [m2(0), m2(5.05), m2(4.7)], m2(0.25))
-[1.2, 3.9, 6.6, 9.3].each do |x|
-  lat2_box(g_house.entities, MAT_GLASS, m2(x), m2(5.28), m2(0.35), m2(x + 2.0), m2(5.34), m2(2.75))
+[3.4, 8.4].each do |x|
+  lat2_box(g_house.entities, MAT_GLASS, m2(x), m2(5.28), m2(0.3), m2(x + 3.0), m2(5.34), m2(2.85))
 end
-[1.0, 3.7, 6.4, 9.1].each do |x|
-  lat2_box(g_house.entities, MAT_DARK, m2(x), m2(5.28), m2(3.5), m2(x + 2.0), m2(5.34), m2(4.9))
+[1.3, 5.3, 9.3].each do |x|
+  lat2_box(g_house.entities, MAT_DARK, m2(x), m2(5.28), m2(3.5), m2(x + 1.8), m2(5.34), m2(4.9))
 end
-# 街面(Y=0): 蓝玻璃带(推拉门版面)
-[0.7, 3.1, 5.5, 7.9, 10.3].each do |x|
-  lat2_box(g_house.entities, MAT_GLASS, m2(x), m2(-0.02), m2(0.55), m2(x + 1.6), m2(0.04), m2(1.55))
+# 街面(Y=0): 入口门 + 窗带(依西立面开启态)
+lat2_box(g_house.entities, MAT_PLY, m2(0.7), m2(-0.04), m2(0.3), m2(1.9), m2(0.02), m2(2.1))
+[3.0, 5.4, 7.8, 10.2, 12.6].each do |x|
+  lat2_box(g_house.entities, MAT_GLASS, m2(x), m2(-0.02), m2(0.55), m2(x + 1.5), m2(0.04), m2(1.55))
 end
 # 室内核心(厨卫楼梯) + 夹层
 lat2_box(g_house.entities, MAT_PLY, m2(4.0), m2(1.0), m2(0.2), m2(6.8), m2(3.4), m2(2.85))
@@ -190,10 +193,10 @@ g_cor = lat2_group('CORRUGATED', '03-主体')
 lat2_plate(g_cor.entities, MAT_CORR,
   [m2(-0.15), m2(-0.15), m2(1.4)], [m2(-0.15), m2(0.4), m2(1.4)],
   [m2(-0.15), m2(0.4), m2(4.62)], [m2(-0.15), m2(-0.15), m2(4.55)], m2(0.45))
-# 单坡屋面板(整片, 檐口 4.72 -> 6.55, 出檐 0.3)
+# 街面侧屋面: 波纹钢(住宅上方, Y -0.3..5.4)
 lat2_plate(g_cor.entities, MAT_CORR,
   [m2(-0.3), m2(-0.3), m2(4.72)], [m2(12.3), m2(-0.3), m2(4.72)],
-  [m2(12.3), m2(12.9), m2(6.55)], [m2(-0.3), m2(12.9), m2(6.55)], m2(0.12))
+  [m2(12.3), m2(5.4), m2(5.51)], [m2(-0.3), m2(5.4), m2(5.51)], m2(0.12))
 # 侧面包覆(随坡, 简化为两段)
 lat2_plate(g_cor.entities, MAT_CORR,
   [m2(-0.15), m2(0.35), m2(1.8)], [m2(0.13), m2(0.35), m2(1.8)],
@@ -221,6 +224,10 @@ lat2_box(g_serre.entities, MAT_FILM, m2(11.92), m2(5.4),   m2(0.36), m2(11.98), 
 # 中段膜(柱间) + 顶段玻璃窗带
 lat2_box(g_serre.entities, MAT_FILM,  m2(0.16), m2(12.44), m2(2.7),  m2(11.84), m2(12.5),  m2(4.25))
 lat2_box(g_serre.entities, MAT_GLASS, m2(0.18), m2(12.44), m2(4.32), m2(11.82), m2(12.5),  m2(5.95))
+# 阳光房上方: 半透明膜屋面(Y 5.4..12.9, 透光让冬季花园明亮)
+lat2_plate(g_serre.entities, MAT_FILM,
+  [m2(0), m2(5.4), m2(5.51)], [m2(12), m2(5.4), m2(5.51)],
+  [m2(12), m2(12.9), m2(6.55)], [m2(0), m2(12.9), m2(6.55)], m2(0.1))
 # 首层玻璃翻板门(6 樘)
 [0.15, 2.05, 3.95, 5.85, 7.75, 9.65].each do |a|
   lat2_box(g_serre.entities, MAT_GLASS, m2(a), m2(12.42), m2(0.36), m2(a + 1.8), m2(12.5), m2(2.45))
