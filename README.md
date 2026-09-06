@@ -30,7 +30,9 @@
 | [快捷键方案.md](快捷键方案.md) | 推荐键位与迁移方法 | 一次性 |
 | [scripts/](scripts/README-脚本使用说明.md) | 4 个自动化 Ruby 脚本 | 随时 |
 | [pipeline/](pipeline/README-管线说明.md) | DWG→DXF→JSON→SketchUp 自动建模管线 | CAD 转模 |
-| [mcp/](mcp/README-MCP桥安装.md) | SketchUp MCP 桥(本地,零依赖) | AI 驱动 |
+| [pipeline/photo_to_model.md](pipeline/photo_to_model.md) | 从图片/图纸还原建筑 —— AI 还原作业指南 | 照片/图纸转模 |
+| [mcp/](mcp/README-MCP桥安装.md) | SketchUp MCP 桥(本地,零依赖,含 AI 视觉闭环) | AI 驱动 |
+| [examples/](examples/) | 实战案例:流水别墅 / 拉塔皮住宅(图纸实测版) | 学习参考 |
 
 ## 快速上手(约 40 分钟)
 
