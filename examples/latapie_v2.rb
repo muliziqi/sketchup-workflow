@@ -45,8 +45,13 @@ def lat2_mat(model, name, rgb, alpha = nil)
   m = model.materials[name]
   unless m
     m = model.materials.add(name)
-    m.color = Sketchup::Color.new(*rgb)
-    m.alpha = alpha if alpha
+    # 透明度必须写进颜色的 alpha 通道(只设 material.alpha 在导出渲染中不生效)
+    if alpha
+      m.color = Sketchup::Color.new(rgb[0], rgb[1], rgb[2], (255 * (1 - alpha)).round)
+      m.alpha = alpha
+    else
+      m.color = Sketchup::Color.new(*rgb)
+    end
   end
   m
 end
@@ -58,7 +63,7 @@ MAT_CORR  = lat2_mat(model, 'MAT_板_波纹钢',   [190, 194, 198])
 MAT_STEEL = lat2_mat(model, 'MAT_框_钢架',     [172, 176, 180])
 MAT_GLASS = lat2_mat(model, 'MAT_窗_玻璃',     [150, 180, 196], 0.45)
 MAT_DARK  = lat2_mat(model, 'MAT_窗_暗玻璃',   [44, 56, 70], 0.8)
-MAT_FILM  = lat2_mat(model, 'MAT_膜_透明',     [242, 246, 242], 0.10)
+MAT_FILM  = lat2_mat(model, 'MAT_膜_透明',     [238, 244, 240], 0.07)
 MAT_PAVE  = lat2_mat(model, 'MAT_地_地砖',     [212, 208, 200])
 MAT_GRASS = lat2_mat(model, 'MAT_地_草地',     [110, 134, 86])
 MAT_LEAF  = lat2_mat(model, 'MAT_树_树冠',     [86, 116, 70])
@@ -173,10 +178,11 @@ lat2_plate(g_house.entities, MAT_CEM,
 lat2_plate(g_house.entities, MAT_PLY,
   [m2(0), m2(5.3), m2(0.2)], [m2(12), m2(5.3), m2(0.2)],
   [m2(12), m2(5.3), m2(5.5)], [m2(0), m2(5.3), m2(4.7)], m2(0.25))
+# 首层: 4 樘木框玻璃门(依 img_12) + 右侧开敞门洞 —— 位于前墙外侧
 [2.2, 4.6, 7.0].each do |x|
   lat2_box(g_house.entities, MAT_GLASS, m2(x), m2(5.56), m2(0.3), m2(x + 1.8), m2(5.62), m2(2.7))
 end
-# 上层开口依 img_12: 4 方窗 + 中央大洞
+# 上层开口依 img_12: 4 方窗 + 中央大洞 —— 位于前墙外侧
 [[1.0, 2.2, 3.7, 4.9], [3.4, 4.6, 3.7, 4.9], [5.1, 6.9, 3.5, 5.2], [7.4, 8.6, 3.7, 4.9], [9.2, 10.4, 3.7, 4.9]].each do |a, b, z1, z2|
   lat2_box(g_house.entities, MAT_DARK, m2(a), m2(5.56), m2(z1), m2(b), m2(5.62), m2(z2))
 end
@@ -219,9 +225,9 @@ lat2_box(g_serre.entities, MAT_STEEL, m2(11.88), m2(5.3),  m2(2.52), m2(12.0),  
 lat2_box(g_serre.entities, MAT_STEEL, m2(0),     m2(5.3),  m2(4.55), m2(0.12),  m2(12.5), m2(4.68))
 lat2_box(g_serre.entities, MAT_STEEL, m2(11.88), m2(5.3),  m2(4.55), m2(12.0),  m2(12.5), m2(4.68))
 # 围护: 全部透明玻璃(依实拍), 位于钢架内侧避免共面; 钢架外露
-lat2_box(g_serre.entities, MAT_GLASS, m2(0.14),  m2(12.28), m2(0.36), m2(11.86), m2(12.34), m2(6.2))
-lat2_box(g_serre.entities, MAT_GLASS, m2(0.16),  m2(5.4),   m2(0.36), m2(0.22),  m2(12.42), m2(6.2))
-lat2_box(g_serre.entities, MAT_GLASS, m2(11.78), m2(5.4),   m2(0.36), m2(11.84), m2(12.42), m2(6.2))
+lat2_box(g_serre.entities, MAT_FILM, m2(0.14),  m2(12.28), m2(0.36), m2(11.86), m2(12.34), m2(6.2))
+# 围护: 依 write_image 渲染实测, 大面积半透明板会渲成灰实心 —— 按用户要求
+# 改为开放钢架形态(无围护板, 仅钢架 + 底部玻璃翻板门 + 透明玻璃屋面)
 # 侧面钢架网格(横梁已有, 补中间立柱)
 [6.9, 8.5, 10.1].each do |y|
   lat2_box(g_serre.entities, MAT_STEEL, m2(0),     m2(y), m2(0.2), m2(0.12), m2(y + 0.1), m2(6.3))
@@ -243,8 +249,8 @@ lat2_plate(g_serre.entities, MAT_GLASS,
 lat2_plate(g_serre.entities, MAT_GLASS,
   [m2(6.5), m2(12.45), m2(0.4)], [m2(5.45), m2(11.9), m2(0.4)],
   [m2(5.45), m2(11.9), m2(2.7)], [m2(6.5), m2(12.45), m2(2.7)], 0.05)
-# 阳光房上方: 透明玻璃屋面(Y 5.4..12.9, 透光) + 三道檩条(垫高 5cm 避免共面)
-lat2_plate(g_serre.entities, MAT_GLASS,
+# 阳光房上方: 透明膜屋面(Y 5.4..12.9, 透光) + 三道檩条(垫高 5cm 避免共面)
+lat2_plate(g_serre.entities, MAT_FILM,
   [m2(0), m2(5.4), m2(5.51)], [m2(12), m2(5.4), m2(5.51)],
   [m2(12), m2(12.9), m2(6.55)], [m2(0), m2(12.9), m2(6.55)], m2(0.1))
 [7.4, 9.4, 11.4].each do |y|
@@ -266,7 +272,7 @@ lat2_box(g_serre.entities, MAT_PAVE, m2(0.1), m2(5.32), m2(0.2), m2(11.9), m2(12
 puts '[5/7] 配景...'
 # (依实拍: 顶部斜坡无额外突起, 屋面通风条带已按用户意见移除)
 g_land = lat2_group('TREES', '05-配景')
-[[-5, 4, 7, 2.6], [16, 8, 8, 3], [18.5, 14, 6.5, 2.4], [-6.5, 14, 7.5, 2.8], [5, 16.5, 7, 2.6], [16, -6, 7, 2.6]].each do |x, y, h, r|
+[[-5, 4, 7, 2.6], [16, 8, 8, 3], [18.5, 14, 6.5, 2.4], [-6.5, 14, 7.5, 2.8], [2, 19.5, 7, 2.6], [16, -6, 7, 2.6]].each do |x, y, h, r|
   lat2_tree(g_land.entities, m2(x), m2(y), h, r)
 end
 
