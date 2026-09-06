@@ -64,6 +64,31 @@ const TOOLS = [
   },
   { name: 'su_save', description: '保存当前模型', inputSchema: { type: 'object', properties: { path: { type: 'string', description: '保存路径(.skp), 缺省为当前路径' } } } },
   { name: 'su_export_png', description: '把当前视图导出为 PNG 图片', inputSchema: { type: 'object', properties: { path: { type: 'string' }, width: { type: 'number' }, height: { type: 'number' } }, required: ['path'] } },
+  {
+    name: 'su_snapshot',
+    description: '即时预览当前视图为 PNG(可用 camera 指定 eye/target/up/persp)。AI 改完模型后立即"看"一眼用。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '输出 PNG 路径, 缺省 .../cad2skp/preview.png' },
+        width: { type: 'number' }, height: { type: 'number' },
+        camera: {
+          type: 'object',
+          properties: {
+            eye: { type: 'array', items: { type: 'number' } },
+            target: { type: 'array', items: { type: 'number' } },
+            up: { type: 'array', items: { type: 'number' } },
+            persp: { type: 'boolean' },
+          },
+        },
+      },
+    },
+  },
+  {
+    name: 'su_look_around',
+    description: '一次输出 5 张检查快照(东南/西南/西北/东北环绕 + 顶视)到 exports/preview_*.png, 供 AI 视觉审查模型整体状态。',
+    inputSchema: { type: 'object', properties: { dir: { type: 'string', description: '输出目录, 缺省 .../cad2skp/exports' } } },
+  },
   { name: 'su_zoom_extents', description: '视图全屏缩放(显示全部模型)', inputSchema: { type: 'object', properties: {} } },
 ];
 
@@ -76,6 +101,8 @@ async function dispatch(name, args) {
     case 'su_eval_ruby': return callBridge({ cmd: 'eval', code: args.code || '' });
     case 'su_save': return callBridge({ cmd: 'save', path: args.path || '' });
     case 'su_export_png': return callBridge({ cmd: 'export_png', path: args.path, width: args.width, height: args.height });
+    case 'su_snapshot': return callBridge({ cmd: 'snapshot', path: args.path, width: args.width, height: args.height, camera: args.camera });
+    case 'su_look_around': return callBridge({ cmd: 'look_around', dir: args.dir });
     case 'su_zoom_extents': return callBridge({ cmd: 'zoom_extents' });
     default: throw new Error('unknown tool: ' + name);
   }

@@ -31,6 +31,7 @@ module SU_MCP
   @@queue = Queue.new
   @@mutex = Mutex.new
   @@server = nil
+  @@timer = nil
 
   def self.handle(req)
     cmd = req['cmd'].to_s
@@ -74,6 +75,62 @@ module SU_MCP
     when 'zoom_extents'
       model.active_view.zoom_extents
       { ok: true }
+    when 'snapshot'
+      # 即时预览: 可带 camera {eye,target,up,persp}, 缺省输出 preview.png
+      path = req['path'] || 'C:/Users/muliz/.zcode/workspace/default/cad2skp/preview.png'
+      w = req['width'] || 1280
+      h = req['height'] || 720
+      v = model.active_view
+      cam = req['camera']
+      if cam.is_a?(Hash)
+        persp = cam.fetch('persp', true)
+        begin
+          v.camera = Sketchup::Camera.new(cam['eye'], cam['target'], cam['up'] || [0, 0, 1], persp)
+        rescue
+          v.camera = Sketchup::Camera.new(cam['eye'], cam['target'], cam['up'] || [0, 0, 1])
+        end
+      end
+      ok = v.write_image(filename: path, width: w, height: h, antialias: true)
+      { ok: ok, path: path }
+    when 'look_around'
+      # AI 视觉检查: 环绕 4 角 + 顶视, 一次输出 5 张快照
+      bb = model.bounds
+      c = bb.center
+      diag = bb.diagonal
+      base = req['dir'] || 'C:/Users/muliz/.zcode/workspace/default/cad2skp/exports'
+      Dir.mkdir(base) unless File.directory?(base)
+      tz = bb.min.z + (bb.max.z - bb.min.z) * 0.3
+      shots = []
+      angles = [['SE', diag * 0.35, -diag * 0.35], ['SW', -diag * 0.35, -diag * 0.35],
+                ['NW', -diag * 0.35, diag * 0.35], ['NE', diag * 0.35, diag * 0.35]]
+      angles.each_with_index do |(nm, dx, dy), i|
+        begin
+          v.camera = Sketchup::Camera.new([c.x + dx, c.y + dy, bb.max.z + diag * 0.15],
+                                          [c.x, c.y, tz], [0, 0, 1], true)
+        rescue
+          v.camera = Sketchup::Camera.new([c.x + dx, c.y + dy, bb.max.z + diag * 0.15],
+                                          [c.x, c.y, 0], [0, 0, 1])
+        end
+        p = File.join(base, "preview_#{i + 1}_#{nm}.png")
+        ok = false
+        begin
+          ok = v.write_image(filename: p, width: 1024, height: 640, antialias: true)
+        rescue
+        end
+        shots << { name: nm, path: p, ok: ok }
+      end
+      begin
+        v.camera = Sketchup::Camera.new([c.x, c.y - 1, bb.max.z + diag], [c.x, c.y, 0], [0, 1, 0], false)
+      rescue
+      end
+      p = File.join(base, 'preview_5_TOP.png')
+      ok = false
+      begin
+        ok = v.write_image(filename: p, width: 1024, height: 640, antialias: true)
+      rescue
+      end
+      shots << { name: 'TOP', path: p, ok: ok }
+      { ok: true, shots: shots }
     else
       { ok: false, error: "unknown cmd: #{cmd}" }
     end
@@ -102,56 +159,63 @@ module SU_MCP
   end
 
   def self.start
-    return if @@server
-    begin
-      @@server = TCPServer.new('127.0.0.1', PORT)
-    rescue => e
-      puts "SU_MCP: port #{PORT} failed: #{e.message}"
-      return
-    end
-    Thread.new do
-      loop do
-        begin
-          client = @@server.accept
-        rescue
-          next
-        end
-        Thread.new(client) do |c|
+    if @@server.nil?
+      begin
+        @@server = TCPServer.new('127.0.0.1', PORT)
+      rescue => e
+        puts "SU_MCP: port #{PORT} failed: #{e.message}"
+        return
+      end
+      Thread.new do
+        loop do
           begin
-            while (line = c.gets)
-              line = line.strip
-              next if line.empty?
-              begin
-                req = JSON.parse(line)
-              rescue
-                c.puts(JSON.generate(ok: false, error: 'bad json'))
-                next
-              end
-              job = { req: req, done: false, claimed: false,
-                      resp: nil, ts: Time.now }
-              @@queue << job
-              deadline = Time.now + 180
-              while !job[:done] && Time.now < deadline
-                # UI 线程 2 秒没接活 -> 工作线程降级执行
-                if !job[:claimed] && Time.now > job[:ts] + 2.0 && claim(job)
-                  run_job(job)
-                end
-                break if job[:done]
-                sleep 0.05
-              end
-              c.puts(JSON.generate(job[:resp] || { ok: false, error: 'timeout' }))
-            end
+            client = @@server.accept
           rescue
-          ensure
+            next
+          end
+          Thread.new(client) do |c|
             begin
-              c.close
+              while (line = c.gets)
+                line = line.strip
+                next if line.empty?
+                begin
+                  req = JSON.parse(line)
+                rescue
+                  c.puts(JSON.generate(ok: false, error: 'bad json'))
+                  next
+                end
+                job = { req: req, done: false, claimed: false,
+                        resp: nil, ts: Time.now }
+                @@queue << job
+                deadline = Time.now + 180
+                while !job[:done] && Time.now < deadline
+                  # UI 线程 2 秒没接活 -> 工作线程降级执行
+                  if !job[:claimed] && Time.now > job[:ts] + 2.0 && claim(job)
+                    run_job(job)
+                  end
+                  break if job[:done]
+                  sleep 0.05
+                end
+                c.puts(JSON.generate(job[:resp] || { ok: false, error: 'timeout' }))
+              end
             rescue
+            ensure
+              begin
+                c.close
+              rescue
+              end
             end
           end
         end
       end
     end
-    UI.start_timer(0.1, true) do
+    # 每次调用 start(含热重载)都强制重建 UI 定时器:
+    # SketchUp 最小化会取消定时器, 不重建则队列永远无人处理
+    begin
+      UI.stop_timer(@@timer) if @@timer
+    rescue
+    end
+    @@timer = UI.start_timer(0.1, true) do
       until @@queue.empty?
         job = @@queue.pop rescue break
         next unless claim(job)
@@ -161,11 +225,11 @@ module SU_MCP
     begin
       if File.directory?(File.dirname(STATUS_FILE))
         File.write(STATUS_FILE, JSON.generate(port: PORT, pid: Process.pid,
-                                              version: '1.1', started: Time.now.to_s))
+                                              version: '1.3', started: Time.now.to_s))
       end
     rescue
     end
-    puts "SU_MCP v1.1: listening on 127.0.0.1:#{PORT}"
+    puts "SU_MCP v1.3: listening on 127.0.0.1:#{PORT}"
   end
 
   unless file_loaded?('su_mcp_bridge.rb')

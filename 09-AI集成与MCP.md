@@ -21,9 +21,28 @@ DWG → DXF → JSON → Ruby 白模,详见 [pipeline/README-管线说明.md](pi
 
 ### 2. SketchUp MCP 桥(`mcp/`)
 
-本地 TCP + stdio 双层桥,让任意 MCP 客户端能查模型、跑 Ruby、存盘、导图。安装见 [mcp/README-MCP桥安装.md](mcp/README-MCP桥安装.md)。
+本地 TCP + stdio 双层桥,让任意 MCP 客户端能查模型、跑 Ruby、存盘、导图、**出预览图**。安装见 [mcp/README-MCP桥安装.md](mcp/README-MCP桥安装.md)。
 
 **安全须知**:`su_eval_ruby` 等于把模型控制权交给 AI。只监听 127.0.0.1,但本机程序均可连;执行破坏性操作前让 AI 先 `su_save`。
+
+### AI 视觉闭环("用眼睛看")
+
+AI 建模最大的风险是"盲改"。桥 v1.3 起内置视觉检查命令,与桌面自动化(把 SketchUp 调到前台)配合,形成闭环:
+
+```
+改模型(eval/load) → su_snapshot 或 su_look_around(出快照)
+   → AI 读取 PNG 用视觉审查(构图/穿模/漏项/比例)
+   → 发现问题 → 改脚本 → 再看 → 直到满意 → su_save
+```
+
+实战踩坑结论(2026 实机):
+1. **SketchUp 失去前台焦点 = UI 定时器暂停 + `active_view` 变 nil**。几何命令有工作线程兜底仍可跑;视图命令(快照/导图)会失败——先激活 SketchUp 窗口再发命令,失败就重试。
+2. **最小化 = Ruby 整体冻结**,一切命令无响应。
+3. 替代方案:直接对 SketchUp 视口截屏(桌面自动化)同样能让 AI"看",不依赖视图 API;桥的快照命令则能固定相机、批量出检查视角。
+
+### 与其它 AI 审图分工
+
+若同机还有针对 CAD 图纸的 AI 审图管线(查标注、图层、坐标换算),注意分工:图纸层审查交给那条管线;模型层审查(几何、材质、视角、穿模)用本套件的 snapshot/look_around。两者共用"AI 看 → 报告 → 修"的循环模式。
 
 ## 与本工作流的结合点
 
