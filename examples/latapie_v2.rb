@@ -169,16 +169,16 @@ g_house = lat2_group('HOUSE', '03-主体')
 lat2_plate(g_house.entities, MAT_CEM,
   [m2(0), m2(0), m2(0.2)], [m2(0), m2(5.3), m2(0.2)],
   [m2(0), m2(5.3), m2(5.5)], [m2(0), m2(0), m2(4.7)], m2(12))
-# 冬季花园方向前墙(木质, 依实拍): 2 樘大推拉门(厨房/客厅) + 3 樘卧室百叶窗
+# 冬季花园方向前墙(木质, 依实拍, 位于主体外侧): 3 樘玻璃门 + 上层 5 开口
 lat2_plate(g_house.entities, MAT_PLY,
-  [m2(0), m2(5.05), m2(0.2)], [m2(12), m2(5.05), m2(0.2)],
-  [m2(12), m2(5.05), m2(5.5)], [m2(0), m2(5.05), m2(4.7)], m2(0.25))
+  [m2(0), m2(5.3), m2(0.2)], [m2(12), m2(5.3), m2(0.2)],
+  [m2(12), m2(5.3), m2(5.5)], [m2(0), m2(5.3), m2(4.7)], m2(0.25))
 [2.2, 4.6, 7.0].each do |x|
-  lat2_box(g_house.entities, MAT_GLASS, m2(x), m2(5.28), m2(0.3), m2(x + 1.8), m2(5.34), m2(2.7))
+  lat2_box(g_house.entities, MAT_GLASS, m2(x), m2(5.56), m2(0.3), m2(x + 1.8), m2(5.62), m2(2.7))
 end
 # 上层开口依 img_12: 4 方窗 + 中央大洞
 [[1.0, 2.2, 3.7, 4.9], [3.4, 4.6, 3.7, 4.9], [5.1, 6.9, 3.5, 5.2], [7.4, 8.6, 3.7, 4.9], [9.2, 10.4, 3.7, 4.9]].each do |a, b, z1, z2|
-  lat2_box(g_house.entities, MAT_DARK, m2(a), m2(5.28), m2(z1), m2(b), m2(5.34), m2(z2))
+  lat2_box(g_house.entities, MAT_DARK, m2(a), m2(5.56), m2(z1), m2(b), m2(5.62), m2(z2))
 end
 # 街面(Y=0): 4 樘轴门(依平面图 4 弧节奏)
 [0.9, 4.1, 7.3, 10.5].each do |x|
@@ -218,10 +218,10 @@ lat2_box(g_serre.entities, MAT_STEEL, m2(0),     m2(5.3),  m2(2.52), m2(0.12),  
 lat2_box(g_serre.entities, MAT_STEEL, m2(11.88), m2(5.3),  m2(2.52), m2(12.0),  m2(12.5), m2(2.66))
 lat2_box(g_serre.entities, MAT_STEEL, m2(0),     m2(5.3),  m2(4.55), m2(0.12),  m2(12.5), m2(4.68))
 lat2_box(g_serre.entities, MAT_STEEL, m2(11.88), m2(5.3),  m2(4.55), m2(12.0),  m2(12.5), m2(4.68))
-# 膜: 花园面整片(半透) + 顶(半透); 侧面改透明玻璃 + 钢架网格(依实拍)
-lat2_box(g_serre.entities, MAT_FILM, m2(0.14),  m2(12.47), m2(0.36), m2(11.86), m2(12.52), m2(6.2))
-lat2_box(g_serre.entities, MAT_GLASS, m2(0.02),  m2(5.4),   m2(0.36), m2(0.08),  m2(12.42), m2(6.2))
-lat2_box(g_serre.entities, MAT_GLASS, m2(11.92), m2(5.4),   m2(0.36), m2(11.98), m2(12.42), m2(6.2))
+# 围护: 全部透明玻璃(依实拍), 位于钢架内侧避免共面; 钢架外露
+lat2_box(g_serre.entities, MAT_GLASS, m2(0.14),  m2(12.28), m2(0.36), m2(11.86), m2(12.34), m2(6.2))
+lat2_box(g_serre.entities, MAT_GLASS, m2(0.16),  m2(5.4),   m2(0.36), m2(0.22),  m2(12.42), m2(6.2))
+lat2_box(g_serre.entities, MAT_GLASS, m2(11.78), m2(5.4),   m2(0.36), m2(11.84), m2(12.42), m2(6.2))
 # 侧面钢架网格(横梁已有, 补中间立柱)
 [6.9, 8.5, 10.1].each do |y|
   lat2_box(g_serre.entities, MAT_STEEL, m2(0),     m2(y), m2(0.2), m2(0.12), m2(y + 0.1), m2(6.3))
@@ -231,16 +231,25 @@ end
 [1.0, 3.0, 5.0, 7.0, 9.0, 11.0].each do |x|
   lat2_box(g_serre.entities, MAT_STEEL, m2(x - 0.03), m2(12.44), m2(0.2), m2(x + 0.03), m2(12.5), m2(6.3))
 end
-# 中段膜(柱间) + 顶段玻璃窗带
-lat2_box(g_serre.entities, MAT_FILM,  m2(0.16), m2(12.44), m2(2.7),  m2(11.84), m2(12.5),  m2(4.25))
-lat2_box(g_serre.entities, MAT_GLASS, m2(0.18), m2(12.44), m2(4.32), m2(11.82), m2(12.5),  m2(5.95))
-# 阳光房上方: 半透明膜屋面(Y 5.4..12.9, 透光让冬季花园明亮)
-lat2_plate(g_serre.entities, MAT_FILM,
+# 中段/顶段玻璃并入整片围护(不再单设, 避免共面上色)
+# 首层玻璃翻板门(6 樘, 位于玻璃围护外侧)
+[0.15, 2.05, 3.95, 5.85, 7.75, 9.65].each do |a|
+  lat2_box(g_serre.entities, MAT_GLASS, m2(a), m2(12.36), m2(0.36), m2(a + 1.8), m2(12.44), m2(2.45))
+end
+# 中央两扇翻开的大翻板门(依 img_08)
+lat2_plate(g_serre.entities, MAT_GLASS,
+  [m2(4.3), m2(12.45), m2(0.4)], [m2(5.35), m2(11.9), m2(0.4)],
+  [m2(5.35), m2(11.9), m2(2.7)], [m2(4.3), m2(12.45), m2(2.7)], 0.05)
+lat2_plate(g_serre.entities, MAT_GLASS,
+  [m2(6.5), m2(12.45), m2(0.4)], [m2(5.45), m2(11.9), m2(0.4)],
+  [m2(5.45), m2(11.9), m2(2.7)], [m2(6.5), m2(12.45), m2(2.7)], 0.05)
+# 阳光房上方: 透明玻璃屋面(Y 5.4..12.9, 透光) + 三道檩条(垫高 5cm 避免共面)
+lat2_plate(g_serre.entities, MAT_GLASS,
   [m2(0), m2(5.4), m2(5.51)], [m2(12), m2(5.4), m2(5.51)],
   [m2(12), m2(12.9), m2(6.55)], [m2(0), m2(12.9), m2(6.55)], m2(0.1))
-# 首层玻璃翻板门(6 樘)
-[0.15, 2.05, 3.95, 5.85, 7.75, 9.65].each do |a|
-  lat2_box(g_serre.entities, MAT_GLASS, m2(a), m2(12.42), m2(0.36), m2(a + 1.8), m2(12.5), m2(2.45))
+[7.4, 9.4, 11.4].each do |y|
+  zr = m2(4.72 + ((y + 0.3) / 13.2) * 1.83)
+  lat2_box(g_serre.entities, MAT_STEEL, m2(0), m2(y - 0.06), zr + m2(0.05), m2(12), m2(y + 0.06), zr + m2(0.13))
 end
 # X 拉索(花园面 3 组)
 [[0.3, 3.9], [4.1, 7.9], [8.1, 11.7]].each do |a, b|
