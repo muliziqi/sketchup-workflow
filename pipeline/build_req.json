@@ -1,0 +1,1 @@
+{"cmd":"eval","code":"$old = $stdout; $stdout = File.open('C:/Users/muliz/.zcode/workspace/default/cad2skp/build_log.txt','w'); $stdout.sync = true; begin; load 'C:/Users/muliz/.zcode/workspace/default/cad2skp/build.rb'; rescue => e; puts 'FATAL: ' + e.class.to_s + ': ' + e.message; ensure; $stdout.close rescue nil; $stdout = $old; end; 'BUILD-EXIT'"}

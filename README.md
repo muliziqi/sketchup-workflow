@@ -26,8 +26,11 @@
 | [06-渲染与后期.md](06-渲染与后期.md) | Enscape/D5/V-Ray 流程与出图规格 | 表现阶段 |
 | [07-插件清单.md](07-插件清单.md) | 该装哪些插件、装在哪 | 按需 |
 | [08-文件管理与协作.md](08-文件管理与协作.md) | 文件夹结构、版本规则、软件互通 | 项目启动时 |
+| [09-AI集成与MCP.md](09-AI集成与MCP.md) | AI 驱动 SketchUp:生态调研、MCP 桥、2026 API 备忘 | 想自动化时 |
 | [快捷键方案.md](快捷键方案.md) | 推荐键位与迁移方法 | 一次性 |
 | [scripts/](scripts/README-脚本使用说明.md) | 4 个自动化 Ruby 脚本 | 随时 |
+| [pipeline/](pipeline/README-管线说明.md) | DWG→DXF→JSON→SketchUp 自动建模管线 | CAD 转模 |
+| [mcp/](mcp/README-MCP桥安装.md) | SketchUp MCP 桥(本地,零依赖) | AI 驱动 |
 
 ## 快速上手(约 40 分钟)
 
