@@ -44,6 +44,24 @@ AI 建模最大的风险是"盲改"。桥 v1.3 起内置视觉检查命令,与�
 
 若同机还有针对 CAD 图纸的 AI 审图管线(查标注、图层、坐标换算),注意分工:图纸层审查交给那条管线;模型层审查(几何、材质、视角、穿模)用本套件的 snapshot/look_around。两者共用"AI 看 → 报告 → 修"的循环模式。
 
+### 社区工作流复用(已落地)
+
+复用 [mhyrr/sketchup-mcp](https://github.com/mhyrr/sketchup-mcp)(MIT, 社区最成熟的 SketchUp MCP)——其 SketchUp 插件已安装到本机 Plugins,工具面共 13 个:
+
+`create_component`(cube/cylinder/sphere/cone)、`delete_component`、`transform_component`、`get_selection`、`set_material`、`export_scene`(skp/obj/dae/stl/png/jpg)、`boolean_operation`、`chamfer_edges`、`fillet_edges`、**`create_mortise_tenon`(榫卯)/`create_dovetail`(燕尾榫)/`create_finger_joint`(指接榫)**、`eval_ruby`
+
+架构与本套件桥并存(端口不同不冲突):
+
+```
+MCP 客户端 ──stdio──> community-mcp-stdio.mjs ──TCP 9876──> su_mcp 插件(社区, JSON-RPC)
+MCP 客户端 ──stdio──> su_mcp_server.mjs      ──TCP 5768──> su_mcp_bridge(自研, JSON)
+```
+
+- 复用时把自研桥模块改名 `SU_MCP_BRIDGE`,避免与社区 `SU_MCP` 模块重名冲突
+- 社区插件未内置 get_scene_info,适配器用 eval_ruby 组合实现
+- 二者已在 ZCode 用户配置(`~/.zcode/cli/config.json → mcp.servers`)注册:`sketchup-community` 与 `sketchup-bridge`,新会话自动连接
+- 注意:社区插件同样受"失焦/最小化停摆"限制;其 Start Server 需在扩展程序菜单触发,或经桥 eval `SU_MCP.instance_variable_get(:@server)&.start`
+
 ## 与本工作流的结合点
 
 - **02/03 篇的建模规范** → 写进 build.rb(先成组再推拉、组件复用、Tag 体系、材质命名 MAT_部位_名称)

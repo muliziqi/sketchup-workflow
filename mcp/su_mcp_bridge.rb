@@ -25,7 +25,7 @@
 require 'socket'
 require 'json'
 
-module SU_MCP
+module SU_MCP_BRIDGE
   PORT = 5768
   STATUS_FILE = 'C:/Users/muliz/.zcode/workspace/default/cad2skp/bridge_status.json'
   @@queue = Queue.new
