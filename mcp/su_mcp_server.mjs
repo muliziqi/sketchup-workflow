@@ -14,8 +14,20 @@ import readline from 'node:readline';
 const HOST = process.env.SU_MCP_HOST || '127.0.0.1';
 const PORT = parseInt(process.env.SU_MCP_PORT || '5768', 10);
 
-function callBridge(req, timeoutMs = 90000) {
+function callBridge(req, timeoutMs = 200000) {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    let buf = '';
+    let timer;
+    // 客户端超时上限 200s > 桥内单命令 180s deadline(以桥为权威):
+    // 慢 eval 能在客户端放弃前拿到桥返回的真实(可能失败)结果
+    const finish = (err, val) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (err) reject(err);
+      else resolve(val);
+    };
     let sock;
     try {
       sock = net.connect(PORT, HOST, () => {
@@ -25,8 +37,8 @@ function callBridge(req, timeoutMs = 90000) {
       reject(new Error(`无法连接 SketchUp 桥(${HOST}:${PORT}): ${e.message}`));
       return;
     }
-    let buf = '';
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
+      settled = true; // destroy 会触发 close/error, 避免二次 reject
       sock.destroy();
       reject(new Error('SketchUp 桥响应超时(模型是否正忙?)'));
     }, timeoutMs);
@@ -34,18 +46,25 @@ function callBridge(req, timeoutMs = 90000) {
       buf += d.toString('utf8');
       const idx = buf.indexOf('\n');
       if (idx >= 0) {
-        clearTimeout(timer);
-        sock.end();
+        let parsed;
         try {
-          resolve(JSON.parse(buf.slice(0, idx)));
+          parsed = JSON.parse(buf.slice(0, idx));
         } catch {
-          reject(new Error('桥返回了无法解析的数据: ' + buf.slice(0, 200)));
+          finish(new Error('桥返回了无法解析的数据: ' + buf.slice(0, 200)));
+          return;
         }
+        finish(null, parsed);
+        sock.end();
       }
     });
+    sock.on('close', () => {
+      // 桥侧崩掉/重启会静默断连 —— 立即失败, 别干等到超时
+      finish(new Error(
+        `SketchUp 桥在返回结果前关闭了连接(${HOST}:${PORT})。` +
+        '常见原因: SketchUp 正忙/桥刚重启 —— 稍后重试或重启桥(扩展程序菜单)'));
+    });
     sock.on('error', (e) => {
-      clearTimeout(timer);
-      reject(new Error(
+      finish(new Error(
         `无法连接 SketchUp 桥(${HOST}:${PORT}): ${e.message}。` +
         '请确认: 1) SketchUp 已打开  2) 已安装 su_mcp_bridge.rb 插件  3) 端口未被占用'));
     });
@@ -70,7 +89,7 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: '输出 PNG 路径, 缺省 .../cad2skp/preview.png' },
+        path: { type: 'string', description: '输出 PNG 路径, 缺省 ~/sketchup-workflow/preview.png(或 SKWF_HOME 下)' },
         width: { type: 'number' }, height: { type: 'number' },
         camera: {
           type: 'object',
@@ -87,7 +106,7 @@ const TOOLS = [
   {
     name: 'su_look_around',
     description: '一次输出 5 张检查快照(东南/西南/西北/东北环绕 + 顶视)到 exports/preview_*.png, 供 AI 视觉审查模型整体状态。',
-    inputSchema: { type: 'object', properties: { dir: { type: 'string', description: '输出目录, 缺省 .../cad2skp/exports' } } },
+    inputSchema: { type: 'object', properties: { dir: { type: 'string', description: '输出目录, 缺省 ~/sketchup-workflow/exports(或 SKWF_HOME 下)' } } },
   },
   { name: 'su_zoom_extents', description: '视图全屏缩放(显示全部模型)', inputSchema: { type: 'object', properties: {} } },
 ];
@@ -127,7 +146,7 @@ rl.on('line', async (line) => {
         result: {
           protocolVersion: msg.params?.protocolVersion || '2024-11-05',
           capabilities: { tools: {} },
-          serverInfo: { name: 'sketchup-bridge', version: '1.0.0' },
+          serverInfo: { name: 'sketchup-bridge', version: '1.3' },
         },
       });
     } else if (method === 'notifications/initialized') {

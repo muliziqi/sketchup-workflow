@@ -1,14 +1,30 @@
 # encoding: UTF-8
 # ============================================================
 # 流水别墅 Fallingwater (F.L. Wright, 1935) 体块模型
-# 通过 MCP 桥执行: load 'C:/Users/muliz/.zcode/workspace/default/cad2skp/fallingwater.rb'
+# 通过 MCP 桥执行: load '<仓库>/examples/fallingwater.rb'(输出路径见下方三级回退)
 # 要素: 溪流+瀑布+岩石场地 / 四层奶油色混凝土挑板 / 竖向砂岩墙体 /
 #       大玻璃面 / 樱桃红窗楣 / 南向大挑台 / 客舍+连廊 / 树木配景
 # 单位: 英尺(API 内部英寸), 坐标: X=顺溪向(上游+X), Y=跨溪向(南为-Y), Z=向上
 # ============================================================
 
-FW_SKP = 'C:/Users/muliz/.zcode/workspace/default/cad2skp/Fallingwater_v01.skp'
-FW_EXP = 'C:/Users/muliz/.zcode/workspace/default/cad2skp/exports'
+# 输出路径三级回退(与 pipeline 一致): __dir__(examples 上级=仓库根) -> ENV['SKWF_HOME'] -> ~/sketchup-workflow
+require 'fileutils'
+_old_verbose = $VERBOSE
+$VERBOSE = nil # 重复 load 时抑制 already initialized constant 警告
+begin
+  SKWF_ROOT =
+    if __dir__
+      File.expand_path('..', __dir__)
+    elsif ENV['SKWF_HOME'] && !ENV['SKWF_HOME'].empty?
+      File.expand_path(ENV['SKWF_HOME'])
+    else
+      File.join(Dir.home, 'sketchup-workflow')
+    end
+  FW_SKP = File.join(SKWF_ROOT, 'Fallingwater_v01.skp')
+  FW_EXP = File.join(SKWF_ROOT, 'exports')
+ensure
+  $VERBOSE = _old_verbose
+end
 FT = 12.0
 FW_Z = Geom::Vector3d.new(0, 0, 1)
 
@@ -254,7 +270,7 @@ if PAGES_ADD
   end
 end
 
-Dir.mkdir(FW_EXP) unless File.directory?(FW_EXP)
+FileUtils.mkdir_p(FW_EXP) # 父目录一并创建, 客户机首次运行不抛 Errno::ENOENT
 view = model.active_view
 FW_VIEWS = [
   ['FW-01-东南透视', -> { fw_cam([c.x + diag*0.38, c.y - diag*0.42, diag*0.16], [c.x, c.y, fw_ft(8)], [0, 0, 1], true) }],
@@ -274,6 +290,7 @@ FW_VIEWS.each do |name, mk|
 end
 
 begin
+  FileUtils.mkdir_p(File.dirname(FW_SKP)) # 回退根目录可能尚不存在
   model.save(FW_SKP)
   puts "SAVED: #{FW_SKP}"
 rescue => e

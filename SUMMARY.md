@@ -1,6 +1,6 @@
 # SketchUp 工作流套件 — 项目成果总结
 
-> 更新:2026-09-06 · 仓库:github.com/muliziqi/sketchup-workflow · 全部经本机 SketchUp 2026 + AutoCAD 2027 实战验证
+> 更新:2026-09-30 · 仓库:github.com/muliziqi/sketchup-workflow
 
 ## 一、这套东西是什么
 
@@ -17,9 +17,9 @@
 
 ### CAD 转模管线(`pipeline/`)
 ```
-DWG --(AutoCAD COM: SaveAs DXF)--> DXX --(parse_dxf.ps1 文本解析)--> JSON --(build.rb)--> SketchUp 模型
+DWG --(AutoCAD COM: SendCommand ._DXFOUT)--> DXF --(parse_dxf.ps1 文本解析)--> JSON --(build.rb)--> SketchUp 模型
 ```
-- `export_dxf.ps1`:AutoCAD COM 只做一次 SaveAs(格式码 65),规避逐图元访问的卡死
+- `export_dxf.ps1`:AutoCAD COM 只做一次 `SendCommand ._DXFOUT`(FILEDIA=0,精度 16),规避逐图元访问的卡死;复用已开的 AutoCAD 实例时不会替用户退出它
 - `parse_dxf.ps1`:纯文本状态机解析 LINE/LWPOLYLINE/老式 POLYLINE/ARC/CIRCLE/INSERT/MTEXT,块定义递归展平
 - `build.rb`:描线→find_faces→细长面推成墙、大面推成楼板、块定义组件化布置
 - 实战:Floor Plan Sample.dwg(4500 图元)→ 墙 61/幕墙 168/柱 30/隔断 507/家具组件 273/门 39/标签 55
@@ -29,7 +29,7 @@ DWG --(AutoCAD COM: SaveAs DXF)--> DXX --(parse_dxf.ps1 文本解析)--> JSON --
 
 ### SketchUp MCP 桥 v1.3(`mcp/`)
 - `su_mcp_bridge.rb`:SketchUp 内 TCP:5768 JSON 服务(仅本机回环)
-- `su_mcp_server.mjs`:零依赖 Node stdio MCP 服务器,9 个工具(ping/model_info/tags/pages/eval_ruby/save/export_png/snapshot/look_around)
+- `su_mcp_server.mjs`:零依赖 Node stdio MCP 服务器,10 个工具(ping/model_info/tags/pages/eval_ruby/save/export_png/snapshot/look_around/zoom_extents)
 - 双通道执行:UI 线程定时器优先 + 失焦 2 秒自动降级工作线程;每次 start 强制重建定时器
 
 ### 实战案例(`examples/`)
@@ -40,6 +40,8 @@ DWG --(AutoCAD COM: SaveAs DXF)--> DXX --(parse_dxf.ps1 文本解析)--> JSON --
 | 拉塔皮住宅 Maison Latapie | 图纸实测 + 照片对照 | 12×12.6m 单坡体量 + 全高钢架阳光房,610 面 |
 
 ## 三、当前模型状态
+
+> 注:模型产物 .skp 不入库(.gitignore 排除二进制成果),clone 本仓库拿不到下列文件;按 [examples/](examples/) 下脚本与 [pipeline/](pipeline/README-管线说明.md) 管线可在本机重建,或向作者另取模型文件。
 
 - **FloorPlan_Sample_v01.skp**:几何完整;已知限制=单线墙不闭合(墙偏稀疏)、门未开洞
 - **Fallingwater_v01.skp**:完成度高;瀑布/水面/挑板/客舍齐

@@ -1,16 +1,44 @@
 # encoding: UTF-8
 # ============================================================
 # CAD 平面图 -> SketchUp 白模  (Floor Plan Sample.dwg)
-# 用法: 在 SketchUp 的 Ruby 控制台执行:
-#   load 'C:/Users/muliz/.zcode/workspace/default/cad2skp/build.rb'
+# 用法(二选一), 在 SketchUp 的 Ruby 控制台执行:
+#   load '<仓库>/pipeline/build.rb'        # 文件加载
+#   或把本文件全部内容粘贴进控制台
+# 路径三级回退: __dir__(仓库根) -> ENV['SKWF_HOME'] -> ~/sketchup-workflow
+# 数据约定: parse_dxf.ps1 输出的 *.json 在 <根>/data, 模型存 <根>, 出图存 <根>/exports
 # 可重复运行: 每次先清空当前模型再重建
 # 单位: 英寸(与 DWG 一致), 面数预算 < 15 万
 # ============================================================
 require 'json'
+require 'fileutils'
 
-DATA_DIR   = 'C:/Users/muliz/.zcode/workspace/default/cad2skp/data'
-OUT_SKP    = 'C:/Users/muliz/.zcode/workspace/default/cad2skp/FloorPlan_Sample_v01.skp'
-EXPORT_DIR = 'C:/Users/muliz/.zcode/workspace/default/cad2skp/exports'
+# 常量区(至下方 Z = ... 为止)在 $VERBOSE=nil 下赋值: 重复 load 抑制
+# 十几条 already initialized constant 警告噪音; 常量区末尾立即恢复告警
+_old_verbose = $VERBOSE
+$VERBOSE = nil
+
+# 解析出异常尺寸/坐标、不实例化的块名(每次 load 重置, 见下方 BAD_DEFS <<)
+BAD_DEFS = []
+
+# ---- 路径三级回退: __dir__ -> SKWF_HOME -> 用户目录 ----
+# 控制台粘贴时无文件帧, __dir__ 为 nil, 不能对 nil 做 File 操作
+SKWF_ROOT =
+  if __dir__
+    File.expand_path('..', __dir__)                       # pipeline/ -> 仓库根
+  elsif ENV['SKWF_HOME'] && !ENV['SKWF_HOME'].empty?
+    File.expand_path(ENV['SKWF_HOME'])
+  else
+    File.join(Dir.home, 'sketchup-workflow')
+  end
+DATA_DIR   = File.join(SKWF_ROOT, 'data')
+OUT_SKP    = File.join(SKWF_ROOT, 'FloorPlan_Sample_v01.skp')
+EXPORT_DIR = File.join(SKWF_ROOT, 'exports')
+
+unless File.directory?(DATA_DIR)
+  # raise 终止而非仅 puts: 否则流程继续, 下方 jload 会对缺失文件抛难懂的 Errno::ENOENT
+  raise "ERROR: 找不到数据目录 #{DATA_DIR} —— 先跑 pipeline/parse_dxf.ps1 生成 data/*.json, " \
+        "或用 SKWF_HOME 环境变量指定工作根目录。"
+end
 
 WALL_H  = 108.0   # 9' 墙高
 SHELF_H = 72.0    # 储物柜高
@@ -30,6 +58,10 @@ FURN_Z = { 'COMPUTER' => 30, 'FNPHONE' => 30, 'KEYBOARD' => 30, 'IBMAT' => 30 }
 # 跳过的注释类块
 SKIP_DEFS = ['NCL-HL', 'RMNUM', 'DOOR', 'DR-36', 'DR-72P', 'DR-69P']
 DOOR_W = { 'DR-36' => 36.0, 'DR-72P' => 72.0, 'DR-69P' => 69.0, 'DOOR' => 30.0 }
+# 门扇保留的平面坐标窗口(样例图 Floor Plan Sample 专用参数!)
+# 换任何一张图都要按新图幅修改; 若界外真门被误删, 先查这里
+DOOR_XY_MIN = 500.0
+DOOR_XY_MAX = 3800.0
 
 def jload(name)
   txt = File.read(File.join(DATA_DIR, name)).sub(/\A\xEF\xBB\xBF/, '')
@@ -62,7 +94,9 @@ rescue => e
   puts "units skip: #{e.message}"
 end
 
-%w[01-结构 02-墙体门窗 03-楼板屋面 05-家具 10-参考].each do |t|
+# 标记: 03-楼板屋面 暂不创建 —— 楼板几何实际在 g_walls(WALLS 组, 归 02-墙体门窗)内
+# 推拉, 单独拆组会破坏 build_walls 按面找楼板轮廓的逻辑; 需要拆分时再加回
+%w[01-结构 02-墙体门窗 05-家具 10-参考].each do |t|
   model.layers.add(t) if model.layers[t].nil?
 end
 
@@ -85,6 +119,7 @@ MAT_PANEL = get_mat(model, 'MAT_隔断_灰蓝', [124, 134, 152])
 MAT_DOOR  = get_mat(model, 'MAT_门_木色', [150, 105, 70])
 
 Z = Geom::Vector3d.new(0, 0, 1)
+$VERBOSE = _old_verbose # 常量区结束, 恢复告警
 
 # ---------- 工具 ----------
 def add_edges(ents, segs)
@@ -295,7 +330,6 @@ g_furn.name = 'FURNITURE'
 g_furn.layer = model.layers['05-家具']
 cnt = 0
 skip_stat = Hash.new(0)
-BAD_DEFS = [] unless defined?(BAD_DEFS)
 insts.each do |i|
   if BAD_DEFS.include?(i['name'])
     skip_stat[i['name']] += 1
@@ -322,8 +356,10 @@ puts "    组件实例 #{cnt}"
 # ---------- 7. 门 ----------
 puts '[7/8] 门...'
 doors = jload('doors.json')['insts']
-# 过滤: IDOORE 图层是门编号标注, 且剔除平面范围外的野点
-doors = doors.reject { |d| d['layer'] == 'IDOORE' || d['x'].to_f < 500 || d['x'].to_f > 3800 || d['y'].to_f < 500 || d['y'].to_f > 3800 }
+# 过滤: IDOORE 图层是门编号标注, 且剔除平面范围外的野点(窗口见顶部 DOOR_XY_MIN/MAX)
+doors = doors.reject { |d| d['layer'] == 'IDOORE' || d['x'].to_f < DOOR_XY_MIN ||
+                             d['x'].to_f > DOOR_XY_MAX || d['y'].to_f < DOOR_XY_MIN ||
+                             d['y'].to_f > DOOR_XY_MAX }
 g_door = model.entities.add_group
 g_door.name = 'DOORS'
 g_door.layer = model.layers['02-墙体门窗']
@@ -401,10 +437,12 @@ end
 begin
   view = model.active_view
   # SketchUp 2026 兼容: 探测 Pages 可用的建场景方法(add_page 可能被改名)
-  PAGES_ADD = [:add_page, :add, :add_scene, :new_page, :push].find { |m| pages.respond_to?(m) }
+  # 用局部变量而非常量: 本行在 $VERBOSE 恢复区之后赋值, 常量会在重复 load 时
+  # 触发 already initialized constant 警告, 与文件头"重复 load 抑制警告"承诺不符
+  pages_add = [:add_page, :add, :add_scene, :new_page, :push].find { |m| pages.respond_to?(m) }
   puts "Pages 实例方法: #{Sketchup::Pages.instance_methods(false).sort.join(' ')}" rescue nil
-  puts "Pages 新建场景方法: #{PAGES_ADD.inspect}"
-  if PAGES_ADD.nil?
+  puts "Pages 新建场景方法: #{pages_add.inspect}"
+  if pages_add.nil?
     raise 'Pages 没有可用的建场景方法'
   end
   # 2026 的 pages.add 不再自动快照当前视图, 建完必须把相机写进页面
@@ -433,14 +471,14 @@ begin
     end
     pg
   end
-  add_scene(pages, PAGES_ADD, 'SC-00-顶视图', make_cam([c.x, c.y - 1, bb.max.z + diag], [c.x, c.y, 0], [0, 1, 0], false))
-  add_scene(pages, PAGES_ADD, 'SC-05-轴测', make_cam([c.x + diag*0.55, c.y - diag*0.55, bb.max.z + diag*0.45], [c.x, c.y, 0], [0, 0, 1], false))
-  add_scene(pages, PAGES_ADD, 'SC-06-透视', make_cam([c.x + diag*0.4, c.y - diag*0.5, diag*0.3], [c.x, c.y, 50], [0, 0, 1], true))
+  add_scene(pages, pages_add, 'SC-00-顶视图', make_cam([c.x, c.y - 1, bb.max.z + diag], [c.x, c.y, 0], [0, 1, 0], false))
+  add_scene(pages, pages_add, 'SC-05-轴测', make_cam([c.x + diag*0.55, c.y - diag*0.55, bb.max.z + diag*0.45], [c.x, c.y, 0], [0, 0, 1], false))
+  add_scene(pages, pages_add, 'SC-06-透视', make_cam([c.x + diag*0.4, c.y - diag*0.5, diag*0.3], [c.x, c.y, 50], [0, 0, 1], true))
 rescue => e
   puts "scenes error: #{e.message}"
 end
 
-Dir.mkdir(EXPORT_DIR) unless File.directory?(EXPORT_DIR)
+FileUtils.mkdir_p(EXPORT_DIR) # 父目录(回退根)一并创建, 首次运行不抛 Errno::ENOENT
 view = model.active_view
 model.pages.each_with_index do |page, i|
   begin

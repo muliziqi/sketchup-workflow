@@ -8,6 +8,13 @@
 require 'sketchup.rb'
 
 module SKWF
+  # 内联守卫: 本文件可能先于 skwf_setup_template.rb 加载(字母序在前), 自建菜单 helper
+  unless respond_to?(:workflow_menu)
+    def self.workflow_menu
+      @workflow_menu ||= UI.menu('Plugins').add_submenu('SU工作流')
+    end
+  end
+
   def self.clean_model
     model = Sketchup.active_model
     model.start_operation('一键清理模型', true)
@@ -62,6 +69,11 @@ module SKWF
         a, b = clean_entities(group.entities)
         stray += a
         empty_groups += b
+        # 递归后复查父组: 子层清理可能把本组清空了(进循环时它还非空)
+        if !group.deleted? && group.entities.empty?
+          group.erase!
+          empty_groups += 1
+        end
       end
     end
 

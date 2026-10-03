@@ -8,6 +8,13 @@
 require 'sketchup.rb'
 
 module SKWF
+  # 内联守卫: 本文件可能先于 skwf_setup_template.rb 加载(字母序在前), 自建菜单 helper
+  unless respond_to?(:workflow_menu)
+    def self.workflow_menu
+      @workflow_menu ||= UI.menu('Plugins').add_submenu('SU工作流')
+    end
+  end
+
   DEFAULT_WIDTH  = 1920
   DEFAULT_HEIGHT = 1080
 

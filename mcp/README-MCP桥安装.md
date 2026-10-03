@@ -18,8 +18,9 @@ su_mcp_bridge.rb         —— SketchUp 插件,在 SketchUp 内执行
 
 ## 安装
 
-1. 把 `su_mcp_bridge.rb` 复制到插件目录并重启 SketchUp:
-   - Windows: `%APPDATA%\SketchUp\SketchUp 2026\SketchUp\Plugins\`
+1. 把 `su_mcp_bridge.rb`(v1.3)复制到插件目录并重启 SketchUp:
+   - Windows: `%APPDATA%\SketchUp\SketchUp 2026\SketchUp\Plugins\`(资源管理器地址栏粘贴 `%APPDATA%` 回车再找)
+   - macOS: `~/Library/Application Support/SketchUp/SketchUp 2026/SketchUp/Plugins/`
 2. MCP 客户端里添加服务器:
 
 ```json
@@ -32,6 +33,35 @@ su_mcp_bridge.rb         —— SketchUp 插件,在 SketchUp 内执行
   }
 }
 ```
+
+## 社区适配器(可与本桥并列)
+
+仓库附带社区插件主文件 `mcp/community-plugin-main.rb`(来源与许可状态见 [../THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md));它走 **TCP 9876** 的社区协议(JSON-RPC,`{command,parameters,id}`),由 `community-mcp-stdio.mjs` 适配成 stdio MCP。与本桥(5768)端口不同,可同时安装、在 MCP 客户端里并存两条服务器。
+
+安装步骤:
+
+1. 把 `mcp/community-plugin-main.rb` 复制到 SketchUp 插件目录并重启 SketchUp:
+   - Windows: `%APPDATA%\SketchUp\SketchUp 2026\SketchUp\Plugins\`
+   - macOS: `~/Library/Application Support/SketchUp/SketchUp 2026/SketchUp/Plugins/`
+2. 启动社区桥的 TCP 服务,两种方式任选:
+   - SketchUp 菜单 **扩展程序(Extensions) → SketchupMCP → Start Server**;
+   - 或在 Ruby 控制台执行:`SU_MCP.instance_variable_get(:@server)&.start`
+3. MCP 客户端里再加一条社区 stdio 服务器:
+
+```json
+{
+  "mcpServers": {
+    "sketchup-community": {
+      "command": "node",
+      "args": ["C:/path/to/community-mcp-stdio.mjs"]
+    }
+  }
+}
+```
+
+注:社区适配器本身不解析任何命令行参数;`--community` 旗标只有测试替身 `tests/fake_bridge.mjs` 需要(用于切换假桥应答协议),生产注册不要携带。
+
+注意:社区插件同样受"失焦/最小化停摆"限制(见下);其 Start Server 状态不会随 SketchUp 重启自动恢复,每次启动 SketchUp 后需重新触发。
 
 ## 工具列表
 

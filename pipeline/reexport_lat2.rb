@@ -1,7 +1,23 @@
 # encoding: UTF-8
 # 拉塔皮 v2: 相机拉远重出图
-FT = 12.0
-LAT2_EXP = 'C:/Users/muliz/.zcode/workspace/default/cad2skp/exports'
+# 路径三级回退: __dir__(仓库根) -> ENV['SKWF_HOME'] -> ~/sketchup-workflow
+# 常量在 $VERBOSE=nil 下赋值, 重复 load 抑制 already initialized constant 警告
+_old_verbose = $VERBOSE
+$VERBOSE = nil
+begin
+  FT = 12.0
+  SKWF_ROOT =
+    if __dir__
+      File.expand_path('..', __dir__)
+    elsif ENV['SKWF_HOME'] && !ENV['SKWF_HOME'].empty?
+      File.expand_path(ENV['SKWF_HOME'])
+    else
+      File.join(Dir.home, 'sketchup-workflow')
+    end
+  LAT2_EXP = File.join(SKWF_ROOT, 'exports')
+ensure
+  $VERBOSE = _old_verbose
+end
 model = Sketchup.active_model
 def ft(v)
   v * 12.0

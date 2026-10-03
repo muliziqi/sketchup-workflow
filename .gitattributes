@@ -1,0 +1,12 @@
+# 行尾统一策略: 本仓库在 Windows 开发, 文本类一律工作区 CRLF / 仓库内 LF 归一
+* text=auto
+*.md   text eol=crlf
+*.rb   text eol=crlf
+*.ps1  text eol=crlf
+*.mjs  text eol=crlf
+*.json text eol=crlf
+
+# 二进制 / 测试夹具: 禁止行尾改写(迷你 DXF 夹具按字节比对)
+*.dxf binary
+*.dwg binary
+*.skp binary

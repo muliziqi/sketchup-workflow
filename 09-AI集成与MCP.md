@@ -46,9 +46,9 @@ AI 建模最大的风险是"盲改"。桥 v1.3 起内置视觉检查命令,与�
 
 ### 社区工作流复用(已落地)
 
-复用 [mhyrr/sketchup-mcp](https://github.com/mhyrr/sketchup-mcp)(MIT, 社区最成熟的 SketchUp MCP)——其 SketchUp 插件已安装到本机 Plugins,工具面共 13 个:
+复用 [mhyrr/sketchup-mcp](https://github.com/mhyrr/sketchup-mcp)(上游 README 声明 MIT 但未附 LICENSE 文件, 社区最成熟的 SketchUp MCP;来源与许可核实状态见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)),其 SketchUp 插件随仓库附带于 `mcp/community-plugin-main.rb`,工具面共 14 个:
 
-`create_component`(cube/cylinder/sphere/cone)、`delete_component`、`transform_component`、`get_selection`、`set_material`、`export_scene`(skp/obj/dae/stl/png/jpg)、`boolean_operation`、`chamfer_edges`、`fillet_edges`、**`create_mortise_tenon`(榫卯)/`create_dovetail`(燕尾榫)/`create_finger_joint`(指接榫)**、`eval_ruby`
+`get_scene_info`(适配器经 eval_ruby 组合补齐)、`create_component`(cube/cylinder/sphere/cone)、`delete_component`、`transform_component`、`get_selection`、`set_material`、`export_scene`(skp/obj/dae/stl/png/jpg)、`boolean_operation`、`chamfer_edges`、`fillet_edges`、**`create_mortise_tenon`(榫卯)/`create_dovetail`(燕尾榫)/`create_finger_joint`(指接榫)**、`eval_ruby`
 
 架构与本套件桥并存(端口不同不冲突):
 
@@ -58,8 +58,8 @@ MCP 客户端 ──stdio──> su_mcp_server.mjs      ──TCP 5768──> su
 ```
 
 - 复用时把自研桥模块改名 `SU_MCP_BRIDGE`,避免与社区 `SU_MCP` 模块重名冲突
-- 社区插件未内置 get_scene_info,适配器用 eval_ruby 组合实现
-- 二者已在 ZCode 用户配置(`~/.zcode/cli/config.json → mcp.servers`)注册:`sketchup-community` 与 `sketchup-bridge`,新会话自动连接
+- 社区插件未内置 get_scene_info,适配器用 eval_ruby 组合实现,并已在 `community-mcp-stdio.mjs` 的 TOOL_DEFS 注册,tools/list 与 dispatch 保持一致
+- MCP 客户端注册方法见 [mcp/README-MCP桥安装.md](mcp/README-MCP桥安装.md):stdio 服务器各配一条 `node <适配器.mjs>` 即可
 - 注意:社区插件同样受"失焦/最小化停摆"限制;其 Start Server 需在扩展程序菜单触发,或经桥 eval `SU_MCP.instance_variable_get(:@server)&.start`
 
 ## 与本工作流的结合点

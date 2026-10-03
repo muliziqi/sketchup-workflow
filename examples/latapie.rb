@@ -1,7 +1,7 @@
 # encoding: UTF-8
 # ============================================================
 # 拉塔皮住宅 Maison Latapie (Lacaton & Vassal, Floirac, 1993)
-# 通过 MCP 桥执行: load 'C:/Users/muliz/.zcode/workspace/default/cad2skp/latapie.rb'
+# 通过 MCP 桥执行: load '<仓库>/examples/latapie.rb'(输出路径见下方三级回退)
 # 形制(依资料照片与图纸):
 #   15m x 8m 两层体量; 街面(-Y)波纹钢板封闭 + 下层胶合板与蓝玻璃带;
 #   花园面(+Y)全高园艺阳光房钢架(半透明膜/X拉索/大翻板门);
@@ -9,8 +9,24 @@
 # 单位: 米(API 内部英寸)
 # ============================================================
 
-LAT_SKP = 'C:/Users/muliz/.zcode/workspace/default/cad2skp/Latapie_v01.skp'
-LAT_EXP = 'C:/Users/muliz/.zcode/workspace/default/cad2skp/exports'
+# 输出路径三级回退(与 pipeline 一致): __dir__(examples 上级=仓库根) -> ENV['SKWF_HOME'] -> ~/sketchup-workflow
+require 'fileutils'
+_old_verbose = $VERBOSE
+$VERBOSE = nil # 重复 load 时抑制 already initialized constant 警告
+begin
+  SKWF_ROOT =
+    if __dir__
+      File.expand_path('..', __dir__)
+    elsif ENV['SKWF_HOME'] && !ENV['SKWF_HOME'].empty?
+      File.expand_path(ENV['SKWF_HOME'])
+    else
+      File.join(Dir.home, 'sketchup-workflow')
+    end
+  LAT_SKP = File.join(SKWF_ROOT, 'Latapie_v01.skp')
+  LAT_EXP = File.join(SKWF_ROOT, 'exports')
+ensure
+  $VERBOSE = _old_verbose
+end
 LAT_M   = 39.3701
 LAT_Z   = Geom::Vector3d.new(0, 0, 1)
 
@@ -257,7 +273,7 @@ if PAGES_ADD
   end
 end
 
-Dir.mkdir(LAT_EXP) unless File.directory?(LAT_EXP)
+FileUtils.mkdir_p(LAT_EXP) # 父目录一并创建, 客户机首次运行不抛 Errno::ENOENT
 view = model.active_view
 LAT_VIEWS = [
   ['LT-01-花园透视', -> { lat_cam([c.x + diag*0.26, c.y + diag*0.30, diag*0.115], [c.x, c.y - m1(0.5), m1(2.8)], [0, 0, 1], true) }],
@@ -276,6 +292,7 @@ LAT_VIEWS.each do |name, mk|
 end
 
 begin
+  FileUtils.mkdir_p(File.dirname(LAT_SKP)) # 回退根目录可能尚不存在
   model.save(LAT_SKP)
   puts "SAVED: #{LAT_SKP}"
 rescue => e

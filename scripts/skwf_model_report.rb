@@ -8,6 +8,13 @@
 require 'sketchup.rb'
 
 module SKWF
+  # 内联守卫: 本文件可能先于 skwf_setup_template.rb 加载(字母序在前), 自建菜单 helper
+  unless respond_to?(:workflow_menu)
+    def self.workflow_menu
+      @workflow_menu ||= UI.menu('Plugins').add_submenu('SU工作流')
+    end
+  end
+
   FACE_BUDGET = 500_000 # 超过该面数提示优化
 
   def self.model_report
@@ -32,8 +39,11 @@ module SKWF
     end
     walk.call(model.entities)
 
-    used_defs = model.definitions.select { |d| !d.image? && d.instances.any? }
-    unused_defs = model.definitions.count - used_defs.size
+    # 口径对齐 pipeline/build.rb:49 —— "在用"= 有实例; 可清理的"未使用"= 无实例且非
+    # image(image 定义受保护, build.rb 的清理只删 instances.empty? && !image?)
+    used_defs = model.definitions.select { |d| d.instances.any? }
+    unused_defs = model.definitions.count { |d| d.instances.empty? && !d.image? }
+    unused_imgs = model.definitions.count { |d| d.instances.empty? && d.image? }
     heavy = used_defs.map { |d| [d.name, d.entities.grep(Sketchup::Face).size] }
                      .sort_by { |_, n| -n }
                      .first(10)
@@ -48,7 +58,8 @@ module SKWF
     lines << "渲染面数(实例展开): #{stats[:faces]}"
     lines << "渲染线数(实例展开): #{stats[:edges]}"
     lines << "群组: #{stats[:groups]} / 组件实例: #{stats[:instances]}"
-    lines << "组件定义: #{used_defs.size} 个在用 / #{unused_defs} 个未使用"
+    lines << "组件定义: #{used_defs.size} 个在用 / #{unused_defs} 个未使用" +
+             (unused_imgs > 0 ? " / 另有 #{unused_imgs} 个未使用图片(image)定义(受保护, 不计入清理)" : '')
     lines << "材质: #{model.materials.count} / 标记: #{model.layers.count} / 场景: #{model.pages.count}"
     lines << ''
     lines << '最重的组件定义 Top10 (面数):'

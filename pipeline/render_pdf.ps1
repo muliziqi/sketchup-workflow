@@ -1,10 +1,31 @@
-param(
-    [string]$PdfPath = 'C:\Users\muliz\.zcode\workspace\default\cad2skp\latapie_drawings.pdf',
-    [string]$OutDir = 'C:\Users\muliz\.zcode\workspace\default\cad2skp\latapie_ref\pages',
+﻿param(
+    [string]$PdfPath = '',
+    [string]$OutDir = '',
     [int]$MaxPages = 12,
     [double]$Scale = 2.0
 )
 $ErrorActionPreference = 'Stop'
+
+# ---- 路径三级回退: 脚本所在目录(仓库根) -> $env:SKWF_HOME -> 用户目录 ----
+if ($PSScriptRoot)      { $skwfRoot = Split-Path $PSScriptRoot -Parent }
+elseif ($env:SKWF_HOME) { $skwfRoot = $env:SKWF_HOME }
+else                    { $skwfRoot = Join-Path $HOME 'sketchup-workflow' }
+
+# 输入 PDF 缺省: 仓库根\latapie_drawings.pdf -> 仓库根下任一 PDF
+if (-not $PdfPath) {
+    $cand = @((Join-Path $skwfRoot 'latapie_drawings.pdf'))
+    $any = Get-ChildItem -Path $skwfRoot -Filter '*.pdf' -File -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($any) { $cand += $any.FullName }
+    $PdfPath = $cand | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $PdfPath) {
+        Write-Output "ERROR: 未指定 PDF。用法: render_pdf.ps1 -PdfPath <文件.pdf> [-OutDir <输出目录>]"
+        Write-Output "(缺省按 仓库根\latapie_drawings.pdf -> 仓库根下任一 PDF 查找; 可用 SKWF_HOME 指定工作根)"
+        exit 1
+    }
+}
+# 输出目录缺省: PDF 同目录下的 pages\
+if (-not $OutDir) { $OutDir = Join-Path (Split-Path $PdfPath -Parent) 'pages' }
 
 # WinRT 投影(Windows PowerShell 5.1)
 [void][Windows.Data.Pdf.PdfDocument, Windows.Data.Pdf, ContentType = WindowsRuntime]
@@ -43,11 +64,14 @@ for ($i = 0; $i -lt $count; $i++) {
     $stream = Await ($imgFile.OpenAsync([Windows.Storage.FileAccessMode]::ReadWrite)) ([Windows.Storage.Streams.IRandomAccessStream])
     $stream.Size = 0
     $opts = New-Object Windows.Data.Pdf.PdfPageRenderOptions
-    $opts.DestinationWidth = [uint32]([math]::Round($page.Size.Width * $Scale))
-    $opts.DestinationHeight = [uint32]([math]::Round($page.Size.Height * $Scale))
+    # 尺寸先缓存再 Dispose: 释放后再读 $page.Size 拿到的是已释放对象
+    $w = [math]::Round($page.Size.Width * $Scale)
+    $h = [math]::Round($page.Size.Height * $Scale)
+    $opts.DestinationWidth = [uint32]$w
+    $opts.DestinationHeight = [uint32]$h
     AwaitAction ($page.RenderToStreamAsync($stream, $opts))
     $stream.Dispose()
     $page.Dispose()
-    Write-Output ("  {0}  {1}x{2}" -f $name, [math]::Round($page.Size.Width * $Scale), [math]::Round($page.Size.Height * $Scale))
+    Write-Output ("  {0}  {1}x{2}" -f $name, $w, $h)
 }
 Write-Output "RENDER DONE"

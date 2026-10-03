@@ -8,8 +8,24 @@
 # 执行: MCP 桥 eval -> load 本文件; 保存 Latapie_v02.skp
 # ============================================================
 
-LAT2_SKP = 'C:/Users/muliz/.zcode/workspace/default/cad2skp/Latapie_v02.skp'
-LAT2_EXP = 'C:/Users/muliz/.zcode/workspace/default/cad2skp/exports'
+# 输出路径三级回退(与 pipeline 一致): __dir__(examples 上级=仓库根) -> ENV['SKWF_HOME'] -> ~/sketchup-workflow
+require 'fileutils'
+_old_verbose = $VERBOSE
+$VERBOSE = nil # 重复 load 时抑制 already initialized constant 警告
+begin
+  SKWF_ROOT =
+    if __dir__
+      File.expand_path('..', __dir__)
+    elsif ENV['SKWF_HOME'] && !ENV['SKWF_HOME'].empty?
+      File.expand_path(ENV['SKWF_HOME'])
+    else
+      File.join(Dir.home, 'sketchup-workflow')
+    end
+  LAT2_SKP = File.join(SKWF_ROOT, 'Latapie_v02.skp')
+  LAT2_EXP = File.join(SKWF_ROOT, 'exports')
+ensure
+  $VERBOSE = _old_verbose
+end
 LAT2_M   = 39.3701
 LAT2_Z   = Geom::Vector3d.new(0, 0, 1)
 
@@ -311,7 +327,7 @@ if PAGES_ADD
   end
 end
 
-Dir.mkdir(LAT2_EXP) unless File.directory?(LAT2_EXP)
+FileUtils.mkdir_p(LAT2_EXP) # 父目录一并创建, 客户机首次运行不抛 Errno::ENOENT
 view = model.active_view
 LAT2_VIEWS = [
   ['LT2-01-花园透视', -> { lat2_cam([c.x + diag*0.34, c.y + diag*0.40, diag*0.15], [c.x, c.y, m2(3)], [0, 0, 1], true) }],
@@ -331,6 +347,7 @@ LAT2_VIEWS.each do |name, mk|
 end
 
 begin
+  FileUtils.mkdir_p(File.dirname(LAT2_SKP)) # 回退根目录可能尚不存在
   model.save(LAT2_SKP)
   puts "SAVED: #{LAT2_SKP}"
 rescue => e

@@ -37,10 +37,16 @@
 ## 快速上手(约 40 分钟)
 
 1. **做模板(一次性,约 20 分钟)**:新建空白文件,照着 `01-准备与模板` 走一遍,最后运行脚本"01 初始化标准模板",再 `文件 > 另存为模板`。
-2. **装脚本(约 5 分钟)**:把 `scripts/` 下 4 个 `.rb` 文件放进插件目录(或临时粘贴到 Ruby 控制台),方法见 [scripts/README-脚本使用说明.md](scripts/README-脚本使用说明.md)。
+2. **装脚本(约 5 分钟)**:把 `scripts/` 下 4 个 `.rb` 文件放进插件目录(或临时粘贴到 Ruby 控制台),**复制顺序随意**——每个脚本都自带菜单注册,先装哪个都能用;方法见 [scripts/README-脚本使用说明.md](scripts/README-脚本使用说明.md)。
 3. **开新项目(约 5 分钟)**:按 `08-文件管理与协作` 的文件夹结构建目录,导入底图。
 4. **建模**:对照 `02`、`03` 的规范和清单;文件变大就跑一次"03 模型体检报告"。
 5. **出图/交付**:按 `05` 建场景出图;交文件前跑"02 一键清理模型"。
+6. **CAD 转模(按需)**:有 DWG/DXF 平面图要转白模时走 `pipeline/` 管线,全部脚本已参数化:
+   ```powershell
+   powershell -File pipeline/export_dxf.ps1 -dwg "<图纸.dwg>" -dxf "<输出.dxf>"
+   powershell -File pipeline/parse_dxf.ps1  -dxf "<输出.dxf>" [-outDir "<数据目录>"]
+   ```
+   然后在 SketchUp 控制台 `load '<仓库>/pipeline/build.rb'`;详见 [pipeline/README-管线说明.md](pipeline/README-管线说明.md)。
 
 ## 四张检查清单(全文贴在下面各篇里,这里汇总)
 

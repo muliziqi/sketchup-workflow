@@ -11,13 +11,24 @@ import readline from 'node:readline';
 const HOST = process.env.SU_MCP_HOST || '127.0.0.1';
 const PORT = parseInt(process.env.SU_MCP_PORT || '9876', 10);
 
-function callSketchup(req, timeoutMs = 90000) {
+function callSketchup(req, timeoutMs = 200000) {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    let buf = '';
+    let timer;
+    // 客户端超时放宽到 200s: 社区插件本身无内建 deadline, 以社区桥实际返回为权威
+    const finish = (err, val) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (err) reject(err);
+      else resolve(val);
+    };
     const sock = net.connect(PORT, HOST, () => {
       sock.write(JSON.stringify(req) + '\n');
     });
-    let buf = '';
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
+      settled = true; // destroy 会触发 close/error, 避免二次 reject
       sock.destroy();
       reject(new Error(`SketchUp 社区桥(${HOST}:${PORT})响应超时——确认已 Start Server 且窗口未最小化`));
     }, timeoutMs);
@@ -25,15 +36,21 @@ function callSketchup(req, timeoutMs = 90000) {
       buf += d.toString('utf8');
       const idx = buf.indexOf('\n');
       if (idx >= 0) {
-        clearTimeout(timer);
+        let parsed;
+        try { parsed = JSON.parse(buf.slice(0, idx)); }
+        catch { finish(new Error('无法解析桥返回: ' + buf.slice(0, 200))); return; }
+        finish(null, parsed);
         sock.end();
-        try { resolve(JSON.parse(buf.slice(0, idx))); }
-        catch { reject(new Error('无法解析桥返回: ' + buf.slice(0, 200))); }
       }
     });
+    sock.on('close', () => {
+      // 插件侧崩掉/Stop Server 会静默断连 —— 立即失败, 别干等到超时
+      finish(new Error(
+        `SketchUp 社区插件在返回结果前关闭了连接(${HOST}:${PORT})。` +
+        '请确认扩展程序 > MCP Server 已 Start Server 且 SketchUp 未最小化'));
+    });
     sock.on('error', (e) => {
-      clearTimeout(timer);
-      reject(new Error(`无法连接 SketchUp 社区插件(${HOST}:${PORT}): ${e.message}。请确认 1) SketchUp 已打开 2) 扩展程序 > MCP Server > Start Server 已执行`));
+      finish(new Error(`无法连接 SketchUp 社区插件(${HOST}:${PORT}): ${e.message}。请确认 1) SketchUp 已打开 2) 扩展程序 > MCP Server > Start Server 已执行`));
     });
   });
 }
@@ -45,6 +62,8 @@ async function callTool(name, args) {
 }
 
 const TOOL_DEFS = [
+  // 社区插件未内置, 由下方 dispatch 的 getSceneInfo()(经 eval_ruby 组合)实现
+  ['get_scene_info', '获取当前模型概况(标题、实体数、组件定义数、场景数、包围盒)', { type: 'object', properties: {} }],
   ['get_selection', '获取当前选中的图元信息', {}],
   ['create_component', '创建基本体组件(type: cube/cylinder/sphere/cone, 含位置与尺寸)', {
     type: 'object',
@@ -132,7 +151,7 @@ rl.on('line', async (line) => {
         result: {
           protocolVersion: msg.params?.protocolVersion || '2024-11-05',
           capabilities: { tools: {} },
-          serverInfo: { name: 'sketchup-community-mcp', version: '1.0.0' },
+          serverInfo: { name: 'sketchup-community-mcp', version: '1.3' },
         },
       });
     } else if (method === 'tools/list') {

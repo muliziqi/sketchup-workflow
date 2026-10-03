@@ -1,6 +1,6 @@
 # encoding: UTF-8
 # ============================================================
-# SketchUp MCP Bridge v1.1  (su_mcp_bridge.rb)
+# SketchUp MCP Bridge v1.3  (su_mcp_bridge.rb)
 # 在 SketchUp 内启动本地 TCP JSON 服务, 供 MCP 服务器 / AI 客户端驱动。
 # 协议: 每行一个 JSON 请求 {"id":1,"cmd":"ping"} -> 每行一个 JSON 响应
 #
@@ -12,6 +12,8 @@
 #   eval       {code: "..."}      执行 Ruby(变量 model 可用)
 #   save       {path: "..."}      保存模型(缺省存当前路径)
 #   export_png {path, width, height}  导出当前视图 PNG
+#   snapshot    {path?, width?, height?, camera?}  即时预览当前视图 PNG(可带相机 eye/target/up/persp)
+#   look_around {dir?}            环绕 4 角 + 顶视, 一次输出 5 张检查快照到 exports/
 #   zoom_extents                  全屏缩放
 #
 # 端口: 127.0.0.1:5768   仅本机回环, 无外部暴露
@@ -24,14 +26,23 @@
 # ============================================================
 require 'socket'
 require 'json'
+require 'fileutils'
 
 module SU_MCP_BRIDGE
   PORT = 5768
-  STATUS_FILE = 'C:/Users/muliz/.zcode/workspace/default/cad2skp/bridge_status.json'
+  # 缺省工作目录: SKWF_HOME -> 用户目录(Ruby 无 File.mkdir_p, 建多层目录用 FileUtils)
+  SKWF_DIR =
+    if ENV['SKWF_HOME'] && !ENV['SKWF_HOME'].empty?
+      File.expand_path(ENV['SKWF_HOME'])
+    else
+      File.join(Dir.home, 'sketchup-workflow')
+    end
+  STATUS_FILE = File.join(SKWF_DIR, 'bridge_status.json')
   @@queue = Queue.new
   @@mutex = Mutex.new
   @@server = nil
   @@timer = nil
+  @@accept_thread = nil
 
   def self.handle(req)
     cmd = req['cmd'].to_s
@@ -77,7 +88,12 @@ module SU_MCP_BRIDGE
       { ok: true }
     when 'snapshot'
       # 即时预览: 可带 camera {eye,target,up,persp}, 缺省输出 preview.png
-      path = req['path'] || 'C:/Users/muliz/.zcode/workspace/default/cad2skp/preview.png'
+      if req['path'].to_s.empty?
+        FileUtils.mkdir_p(SKWF_DIR)
+        path = File.join(SKWF_DIR, 'preview.png')
+      else
+        path = req['path'].to_s
+      end
       w = req['width'] || 1280
       h = req['height'] || 720
       v = model.active_view
@@ -97,8 +113,8 @@ module SU_MCP_BRIDGE
       bb = model.bounds
       c = bb.center
       diag = bb.diagonal
-      base = req['dir'] || 'C:/Users/muliz/.zcode/workspace/default/cad2skp/exports'
-      Dir.mkdir(base) unless File.directory?(base)
+      base = req['dir'] || File.join(SKWF_DIR, 'exports')
+      FileUtils.mkdir_p(base) unless File.directory?(base)
       tz = bb.min.z + (bb.max.z - bb.min.z) * 0.3
       shots = []
       angles = [['SE', diag * 0.35, -diag * 0.35], ['SW', -diag * 0.35, -diag * 0.35],
@@ -158,19 +174,45 @@ module SU_MCP_BRIDGE
     got
   end
 
-  def self.start
-    if @@server.nil?
+  # 重启/热重载前: 关闭旧 accept 线程与旧 TCPServer。
+  # 不关的话旧线程仍在 accept, 旧 socket 仍占着端口, 新 TCPServer 会 EADDRINUSE
+  def self.stop
+    begin
+      UI.stop_timer(@@timer) if @@timer
+    rescue
+    end
+    @@timer = nil
+    if @@accept_thread
+      @@accept_thread.kill rescue nil
+      @@accept_thread = nil
+    end
+    if @@server
       begin
-        @@server = TCPServer.new('127.0.0.1', PORT)
-      rescue => e
-        puts "SU_MCP: port #{PORT} failed: #{e.message}"
-        return
+        @@server.close rescue nil
+      rescue
       end
-      Thread.new do
+      @@server = nil
+    end
+  end
+
+  def self.start
+    stop
+    server_ok = false
+    begin
+      @@server = TCPServer.new('127.0.0.1', PORT)
+      server_ok = true
+    rescue => e
+      puts "SU_MCP: port #{PORT} failed: #{e.message}"
+      @@server = nil
+    end
+    if server_ok
+      @@accept_thread = Thread.new do
         loop do
           begin
             client = @@server.accept
-          rescue
+          rescue => e
+            # 服务已停(重启)就退出线程; 否则继续 accept
+            break if @@server.nil? || @@server.closed?
             next
           end
           Thread.new(client) do |c|
@@ -223,19 +265,19 @@ module SU_MCP_BRIDGE
       end
     end
     begin
-      if File.directory?(File.dirname(STATUS_FILE))
-        File.write(STATUS_FILE, JSON.generate(port: PORT, pid: Process.pid,
-                                              version: '1.3', started: Time.now.to_s))
-      end
+      FileUtils.mkdir_p(File.dirname(STATUS_FILE))
+      # ok 字段如实反映端口绑定结果: 绑定失败时状态文件不得误报在线
+      File.write(STATUS_FILE, JSON.generate(port: PORT, pid: Process.pid,
+                                            version: '1.3', ok: server_ok,
+                                            started: Time.now.to_s))
     rescue
     end
-    puts "SU_MCP v1.3: listening on 127.0.0.1:#{PORT}"
+    puts "SU_MCP v1.3: listening on 127.0.0.1:#{PORT}" if server_ok
   end
 
   unless file_loaded?('su_mcp_bridge.rb')
     UI.menu('Plugins').add_item('MCP Bridge 重启服务') do
-      @@server = nil
-      start
+      start   # start 内部先 stop: 关旧 accept 线程与 TCPServer 再重建
     end
     file_loaded('su_mcp_bridge.rb')
   end

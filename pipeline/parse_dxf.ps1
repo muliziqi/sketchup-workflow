@@ -1,6 +1,26 @@
+﻿param(
+    [string]$dxf = '',
+    [string]$outDir = ''
+)
 $ErrorActionPreference = 'Continue'
-$dxf = 'C:\Users\muliz\.zcode\workspace\default\cad2skp\floor_plan.dxf'
-$outDir = 'C:\Users\muliz\.zcode\workspace\default\cad2skp\data'
+
+# ---- 路径三级回退: 脚本所在目录(仓库根) -> $env:SKWF_HOME -> 用户目录 ----
+# 控制台直接粘贴/点开运行时 $PSScriptRoot 为空, 不能只依赖它
+if ($PSScriptRoot)      { $skwfRoot = Split-Path $PSScriptRoot -Parent }
+elseif ($env:SKWF_HOME) { $skwfRoot = $env:SKWF_HOME }
+else                    { $skwfRoot = Join-Path $HOME 'sketchup-workflow' }
+
+if (-not $dxf) {
+    $cand = @((Join-Path $skwfRoot 'floor_plan.dxf'), (Join-Path $skwfRoot 'data\floor_plan.dxf'))
+    $dxf = $cand | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $dxf) {
+        Write-Output "ERROR: 未指定输入 DXF。用法: parse_dxf.ps1 -dxf <图纸.dxf> [-outDir <输出目录>]"
+        Write-Output "(缺省按 仓库根\floor_plan.dxf -> 仓库根\data\floor_plan.dxf 查找; 可用 SKWF_HOME 指定工作根)"
+        exit 1
+    }
+}
+if (-not $outDir) { $outDir = Join-Path $skwfRoot 'data' }
+if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Force -Path $outDir | Out-Null }
 
 $walls  = New-Object System.Collections.Generic.List[object]
 $shelv  = New-Object System.Collections.Generic.List[object]
@@ -61,6 +81,7 @@ $cur = $null          # current entity dict
 $curDef = $null       # current raw def
 $poly = $null         # active old-style POLYLINE accumulator
 $inDefCtx = $false
+$unknownTypes = @{}   # 未解析几何的图元类型计数(type -> 数量), 见 Flush-Entity 末尾
 
 function Flush-Entity($e) {
     if ($e -eq $null) { return }
@@ -154,6 +175,13 @@ function Flush-Entity($e) {
         }
         return
     }
+
+    # 未识别类型(SPLINE/ELLIPSE/HATCH/DIMENSION 等)不解析几何, 但必须计数暴露,
+    # 否则换图后几何被静默丢弃无从发现; BLOCK/VERTEX/SEQEND 为结构性图元, 不计
+    if ($t -notin @('BLOCK','VERTEX','SEQEND')) {
+        if ($script:unknownTypes.ContainsKey($t)) { $script:unknownTypes[$t]++ }
+        else { $script:unknownTypes[$t] = 1 }
+    }
 }
 
 $i = 0
@@ -227,20 +255,12 @@ function Resolve-Def([string]$name, [System.Collections.Generic.List[string]]$vi
     $d = $script:rawDefs[$name]
     $segs = New-Object System.Collections.Generic.List[object]
     $polys = New-Object System.Collections.Generic.List[object]
-    $minx = [double]::PositiveInfinity; $miny = [double]::PositiveInfinity
-    $maxx = [double]::NegativeInfinity; $maxy = [double]::NegativeInfinity
     $bx = $d.base[0]; $by = $d.base[1]
-    function TrackPt([double]$x, [double]$y) {
-        if ($x -lt $script:minx) {$script:minx=$x}; if ($x -gt $script:maxx) {$script:maxx=$x}
-        if ($y -lt $script:miny) {$script:miny=$y}; if ($y -gt $script:maxy) {$script:maxy=$y}
-    }
     foreach ($s in $d.segs) {
         $segs.Add($s) | Out-Null
-        TrackPt $s.x1 $s.y1; TrackPt $s.x2 $s.y2
     }
     foreach ($p in $d.polys) {
         $polys.Add(@{ closed = $p.closed; pts = $p.pts }) | Out-Null
-        foreach ($pt in $p.pts) { TrackPt $pt[0] $pt[1] }
     }
     foreach ($ins in $d.ins) {
         $g2 = Resolve-Def $ins.name $visited
@@ -253,7 +273,6 @@ function Resolve-Def([string]$name, [System.Collections.Generic.List[string]]$vi
             $x1 = $ins.x + $ins.sx*($ca*$ax - $sa*$ay); $y1 = $ins.y + $ins.sy*($sa*$ax + $ca*$ay)
             $x2 = $ins.x + $ins.sx*($ca*$bx2 - $sa*$by2); $y2 = $ins.y + $ins.sy*($sa*$bx2 + $ca*$by2)
             $segs.Add((New-DefSeg $x1 $y1 $x2 $y2)) | Out-Null
-            TrackPt $x1 $y1; TrackPt $x2 $y2
         }
         foreach ($p in $g2.polys) {
             $np = @()
@@ -262,7 +281,23 @@ function Resolve-Def([string]$name, [System.Collections.Generic.List[string]]$vi
                 $np += ,@([math]::Round($ins.x + $ins.sx*($ca*$ax - $sa*$ay),3), [math]::Round($ins.y + $ins.sy*($sa*$ax + $ca*$ay),3))
             }
             $polys.Add(@{ closed = $p.closed; pts = $np }) | Out-Null
-            foreach ($pt in $np) { TrackPt $pt[0] $pt[1] }
+        }
+    }
+    # bbox 从本定义最终展平几何统计。不能用跨作用域共享变量:
+    # 旧实现 TrackPt 写 $script: 而此处读局部, bbox 恒为 0; 且 Resolve-Def
+    # 递归时嵌套调用会覆盖共享变量, 统计必须放在几何全部生成之后
+    $minx = [double]::PositiveInfinity; $miny = [double]::PositiveInfinity
+    $maxx = [double]::NegativeInfinity; $maxy = [double]::NegativeInfinity
+    foreach ($s in $segs) {
+        if ($s.x1 -lt $minx) {$minx=$s.x1}; if ($s.x1 -gt $maxx) {$maxx=$s.x1}
+        if ($s.y1 -lt $miny) {$miny=$s.y1}; if ($s.y1 -gt $maxy) {$maxy=$s.y1}
+        if ($s.x2 -lt $minx) {$minx=$s.x2}; if ($s.x2 -gt $maxx) {$maxx=$s.x2}
+        if ($s.y2 -lt $miny) {$miny=$s.y2}; if ($s.y2 -gt $maxy) {$maxy=$s.y2}
+    }
+    foreach ($p in $polys) {
+        foreach ($pt in $p.pts) {
+            if ($pt[0] -lt $minx) {$minx=$pt[0]}; if ($pt[0] -gt $maxx) {$maxx=$pt[0]}
+            if ($pt[1] -lt $miny) {$miny=$pt[1]}; if ($pt[1] -gt $maxy) {$maxy=$pt[1]}
         }
     }
     $bbox = if ($minx -lt 1e17) { @{ minx=[math]::Round($minx,3); miny=[math]::Round($miny,3); maxx=[math]::Round($maxx,3); maxy=[math]::Round($maxy,3) } } else { @{ minx=0; miny=0; maxx=0; maxy=0 } }
@@ -276,17 +311,30 @@ $visited = New-Object System.Collections.Generic.List[string]
 foreach ($nm in $allNames) { Resolve-Def $nm $visited | Out-Null }
 Write-Output ("resolved defs: " + $resolved.Count)
 
-ConvertTo-Json @{ segs = $walls }  -Depth 5 -Compress | Set-Content -Encoding UTF8 "$outDir\walls.json"
-ConvertTo-Json @{ segs = $shelv }  -Depth 5 -Compress | Set-Content -Encoding UTF8 "$outDir\shelving.json"
-ConvertTo-Json @{ segs = $glaz }   -Depth 5 -Compress | Set-Content -Encoding UTF8 "$outDir\glazing.json"
-ConvertTo-Json @{ segs = $cols }   -Depth 5 -Compress | Set-Content -Encoding UTF8 "$outDir\columns.json"
-ConvertTo-Json @{ segs = $stairs } -Depth 5 -Compress | Set-Content -Encoding UTF8 "$outDir\stairs.json"
-ConvertTo-Json @{ segs = $grids }  -Depth 5 -Compress | Set-Content -Encoding UTF8 "$outDir\grid.json"
-ConvertTo-Json @{ polys = $panels } -Depth 5 -Compress | Set-Content -Encoding UTF8 "$outDir\panels.json"
-ConvertTo-Json @{ insts = $doors }  -Depth 5 -Compress | Set-Content -Encoding UTF8 "$outDir\doors.json"
-ConvertTo-Json @{ insts = $furnInsts } -Depth 5 -Compress | Set-Content -Encoding UTF8 "$outDir\furniture_instances.json"
-ConvertTo-Json $resolved -Depth 6 -Compress | Set-Content -Encoding UTF8 "$outDir\block_definitions.json"
-ConvertTo-Json @{ labels = $labels } -Depth 5 -Compress | Set-Content -Encoding UTF8 "$outDir\labels.json"
+# 防呆: 什么都没解析出来就不写文件, 避免用空结果覆盖上一次的好数据
+$total = $walls.Count + $shelv.Count + $glaz.Count + $cols.Count + $stairs.Count + `
+    $grids.Count + $panels.Count + $doors.Count + $furnInsts.Count + $labels.Count + $resolved.Count
+if ($total -eq 0) {
+    Write-Output "ERROR: 未从输入解析出任何实体, 不写输出(避免覆盖已有 JSON)。请确认输入是文本格式的 DXF。"
+    exit 1
+}
+
+# 输出统一 UTF-8 无 BOM(Windows PowerShell 5.1 的 Set-Content -Encoding UTF8 会带 BOM)
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+function Write-JsonFile([string]$path, $obj, [int]$depth) {
+    [System.IO.File]::WriteAllText($path, (ConvertTo-Json $obj -Depth $depth -Compress), $script:utf8NoBom)
+}
+Write-JsonFile "$outDir\walls.json" @{ segs = $walls } 5
+Write-JsonFile "$outDir\shelving.json" @{ segs = $shelv } 5
+Write-JsonFile "$outDir\glazing.json" @{ segs = $glaz } 5
+Write-JsonFile "$outDir\columns.json" @{ segs = $cols } 5
+Write-JsonFile "$outDir\stairs.json" @{ segs = $stairs } 5
+Write-JsonFile "$outDir\grid.json" @{ segs = $grids } 5
+Write-JsonFile "$outDir\panels.json" @{ polys = $panels } 5
+Write-JsonFile "$outDir\doors.json" @{ insts = $doors } 5
+Write-JsonFile "$outDir\furniture_instances.json" @{ insts = $furnInsts } 5
+Write-JsonFile "$outDir\block_definitions.json" $resolved 6
+Write-JsonFile "$outDir\labels.json" @{ labels = $labels } 5
 
 Write-Output "== extracted =="
 Write-Output ("walls:   " + $walls.Count)
@@ -299,4 +347,11 @@ Write-Output ("panels:  " + $panels.Count)
 Write-Output ("doors:   " + $doors.Count)
 Write-Output ("furnI:   " + $furnInsts.Count)
 Write-Output ("labels:  " + $labels.Count)
+# 未分类图元: 不解析几何但如实报数; 换图后若模型缺几何, 先查这里
+if ($unknownTypes.Count -gt 0) {
+    $parts = $unknownTypes.GetEnumerator() | Sort-Object Value -Descending | ForEach-Object { "$($_.Key)x$($_.Value)" }
+    Write-Output ("未分类(已忽略): " + ($parts -join ', '))
+} else {
+    Write-Output "未分类: 0"
+}
 Write-Output "DONE"

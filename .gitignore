@@ -2,3 +2,14 @@
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# 工作产物: 管线数据/导出/预览(本地生成, 不入库)
+exports/
+data/
+*.skp
+*.dxf
+preview*.png
+bridge_status.json
+
+# 例外: 测试夹具需要随仓库走
+!tests/*.dxf
